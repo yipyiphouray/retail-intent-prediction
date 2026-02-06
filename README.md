@@ -1,4 +1,4 @@
-# Online Shopping ML Prediction by SKU YOU LATER
+# Online Shopping ML Prediction by SKU YOU LATER (the best team ever)
 
 End-to-end ML pipeline scaffold to predict purchase intent from online retail sessions.
 
