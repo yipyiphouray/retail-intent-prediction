@@ -1,0 +1,22 @@
+name: online_shopping_ml_prediction_by_sku_you_later
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - typer
+  - loguru
+  - tqdm
+  - ipython
+  - jupyterlab
+  - matplotlib
+  - notebook
+  - numpy
+  - pandas
+  - scikit-learn
+  - ruff
+  - pytest
+  - pip:
+    - python-dotenv
+    - mkdocs
+    - -e .
