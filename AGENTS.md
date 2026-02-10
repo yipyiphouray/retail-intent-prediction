@@ -33,6 +33,7 @@ This file defines working rules for agents in this repository.
   - long-lived branches: `main` (or `master`) and `dev`
   - day-to-day work starts from `dev` using feature branches: `feature/<short-topic>`
   - release preparation uses release branches from `dev`: `release/<version>`
+  - branch names should stay domain/task-focused; avoid tool-specific prefixes in branch names
   - merge releases into `main`/`master` and back-merge into `dev`
 - Never push directly to `main`/`master`.
 - Do not commit directly to `dev`; use feature or release branches and PRs.
