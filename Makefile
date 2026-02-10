@@ -5,6 +5,7 @@
 PROJECT_NAME = online_shopping_ml_prediction_by_sku_you_later
 PYTHON_VERSION = 3.11
 PYTHON_INTERPRETER = python
+UV = uv
 
 #################################################################################
 # COMMANDS                                                                      #
@@ -14,9 +15,12 @@ PYTHON_INTERPRETER = python
 ## Install Python dependencies
 .PHONY: requirements
 requirements:
-	conda env update --name $(PROJECT_NAME) --file environment.yml --prune
-	
+	$(UV) sync --extra dev
 
+## Sync project dependencies into the local virtual environment
+.PHONY: sync
+sync:
+	$(UV) sync --extra dev
 
 
 ## Delete all compiled Python files
@@ -29,30 +33,34 @@ clean:
 ## Lint using ruff (use `make format` to do formatting)
 .PHONY: lint
 lint:
-	ruff format --check
-	ruff check
+	$(UV) run ruff format --check
+	$(UV) run ruff check
 
 ## Format source code with ruff
 .PHONY: format
 format:
-	ruff check --fix
-	ruff format
+	$(UV) run ruff check --fix
+	$(UV) run ruff format
 
 
 
 ## Run tests
 .PHONY: test
 test:
-	python -m pytest tests
+	$(UV) run pytest tests
+
+## Update uv lockfile
+.PHONY: lock
+lock:
+	$(UV) lock
 
 
 ## Set up Python interpreter environment
 .PHONY: create_environment
 create_environment:
-	conda env create --name $(PROJECT_NAME) -f environment.yml
-	
-	@echo ">>> conda env created. Activate with:\nconda activate $(PROJECT_NAME)"
-	
+	$(UV) venv --python $(PYTHON_VERSION)
+	$(UV) sync --extra dev
+	@echo ">>> local virtual environment created. Activate with:\nsource .venv/bin/activate"
 
 
 
@@ -64,7 +72,7 @@ create_environment:
 ## Make dataset
 .PHONY: data
 data: requirements
-	$(PYTHON_INTERPRETER) online_retail_prediction/dataset.py
+	$(UV) run $(PYTHON_INTERPRETER) online_retail_prediction/dataset.py
 
 
 #################################################################################

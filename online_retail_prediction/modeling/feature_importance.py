@@ -1,10 +1,10 @@
 from pathlib import Path
 
-import pandas as pd
-import typer
 from joblib import load
 from loguru import logger
+import pandas as pd
 from sklearn.inspection import permutation_importance
+import typer
 
 from online_retail_prediction.config import MODELS_DIR, PROCESSED_DATA_DIR
 
@@ -27,9 +27,7 @@ def get_model_feature_importance(
         importances = importances / importances.sum()
 
     result = (
-        importances.sort_values(ascending=False)
-        .rename("importance")
-        .reset_index(names="feature")
+        importances.sort_values(ascending=False).rename("importance").reset_index(names="feature")
     )
     return result
 
