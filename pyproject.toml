@@ -16,6 +16,27 @@ classifiers = [
     "License :: OSI Approved :: MIT License"
 ]
 requires-python = "~=3.11.0"
+dependencies = [
+    "joblib",
+    "loguru",
+    "numpy",
+    "pandas",
+    "python-dotenv",
+    "scikit-learn",
+    "tqdm",
+    "typer",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ipython",
+    "jupyterlab",
+    "matplotlib",
+    "mkdocs",
+    "notebook",
+    "pytest",
+    "ruff",
+]
 
 
 [tool.ruff]
@@ -29,4 +50,3 @@ extend-select = ["I"]  # Add import sorting
 [tool.ruff.lint.isort]
 known-first-party = ["online_retail_prediction"]
 force-sort-within-sections = true
-
