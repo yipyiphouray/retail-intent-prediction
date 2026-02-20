@@ -82,3 +82,103 @@ This generates:
 
 - `data/processed/features.csv`
 - `data/processed/labels.csv` (labels come from labeling module, not feature engineering)
+
+## Detailed feature definitions (every engineered column)
+
+Below are precise, implementation-aligned descriptions of each column produced by
+`build_session_features(clickstream, n_clicks=N)` in
+`online_retail_prediction/modeling/feature_engineering.py`.
+
+- `session_id` : session identifier (copied from normalized input `session_id`).
+
+- `n_clicks_observed` : integer count of clicks included in the aggregation for
+  this session = min(N, session_length). Computed as count of rows per
+  `session_id` after taking the first `N` rows by `order`.
+
+- `n_unique_pages` : number of distinct `page` values among the first N clicks.
+  Computed with `nunique(page)` on the truncated group.
+
+- `n_unique_models` : number of distinct `page_2_model` values among first N clicks.
+
+- `n_unique_categories` : `nunique(main_category)` among first N clicks.
+
+- `n_unique_colours` : `nunique(colour)` among first N clicks.
+
+- `price_mean` : arithmetic mean of `price` over the first N clicks for the session.
+  If only one click is present, equals that click's `price`.
+
+- `price_min` : minimum `price` among first N clicks.
+
+- `price_max` : maximum `price` among first N clicks.
+
+- `price_std` : sample standard deviation of `price` among first N clicks. When
+  only one value exists, the code fills `NaN` with `0.0`.
+
+- `high_price_share_first_n` : fraction (in [0,1]) of the first N clicks where
+  `higher_than_average == 1`. Computed as `mean(higher_than_average)` on the
+  truncated group. Example: 2 high-price clicks out of 5 -> 0.4.
+
+- `high_price_count_first_n` : integer sum of `higher_than_average` in first N clicks.
+
+- `category_entropy` : Shannon entropy (bits) of the `main_category` distribution
+  within the first N clicks. Computed as
+  `-sum(p_c * log2(p_c))` where `p_c` is the relative frequency of category `c`
+  among first N clicks. Returns `0.0` for empty groups.
+
+- `category_share_{X}` : for each distinct category value X observed within the
+  first N clicks for a session, a column is produced named `category_share_X`.
+  Each value is the relative frequency of category `X` within that session's
+  first-N clicks (i.e., count(X)/n_clicks_observed). These columns are created
+  dynamically and filled with `0.0` where category `X` did not occur for a
+  given session.
+
+- `top_category_share` : maximum of the `category_share_*` values for that session
+  (the largest single-category proportion among first N clicks).
+
+- `mean_model_frequency`, `max_model_frequency`, `min_model_frequency` :
+  frequency-derived statistics using a global model-frequency mapping computed
+  from the first-N truncated clicks across all sessions in the input batch.
+  Steps:
+  1. compute `model_freq_global[m] = count(m in first-N rows across all sessions) / total_firstN_rows`
+  2. map each click's `page_2_model` to `model_freq_global` and compute per-session
+     mean/max/min of these mapped values.
+
+- `first_model_frequency` : for each session, look up the `page_2_model` value at
+  the first click (within first N) and map it to the global `model_freq_global`
+  (0.0 if model not seen in global map). This captures how common the first
+  model is across the dataset.
+
+- `last_model_frequency` : same as `first_model_frequency` but for the last
+  click included in first N (i.e., the most recent click within truncated window).
+
+- `last_page` : the `page` value of the last click included in the first-N window
+  for the session (taken from grouped.tail(1) on the truncated group).
+
+- `last_location` : `location` for the last click included in the truncated window.
+
+- `last_category_frequency` : frequency of the `main_category` value that appeared
+  in the last included click, computed relative to the first-N distribution for
+  that session (i.e., `category_share_{last_category}`). Implemented by
+  computing global per-session category frequencies among first N and mapping
+  the last-click's category to that frequency (0.0 if absent).
+
+- `last_colour_frequency` : same as `last_category_frequency` but for `colour`.
+
+- `category_transition_count` : number of category-to-category transitions within
+  the first-N sequence. Implementation detail: computed as
+  `int(values.ne(values.shift()).sum() - 1)` on the ordered `main_category`
+  sequence per session, clipped to a minimum of `0`. Intuitively it counts how
+  many times the user switched categories during the observed window (with a
+  floor of 0).
+
+
+### Notes on edge cases and data types
+
+- Sessions with fewer than `N` clicks are retained; all aggregates are computed
+  over the available clicks (no padding). `n_clicks_observed` reflects this.
+- Numeric coercion: `session_id`, `order`, `price`, and `higher_than_average`
+  are coerced to numeric and rows with missing critical values are dropped prior
+  to aggregation.
+- Column naming: raw input columns are normalized (snake_case) and common raw
+  names are mapped (see the normalization section in the file). The feature
+  generator expects normalized inputs but also supports common raw names.
