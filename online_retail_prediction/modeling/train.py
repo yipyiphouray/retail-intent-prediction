@@ -15,7 +15,7 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV, train_test_split
 import typer
 
 from online_retail_prediction.config import MODELS_DIR, PROCESSED_DATA_DIR, RAW_DATA_DIR
@@ -114,33 +114,93 @@ def train_baseline_model(
     return model
 
 
-def evaluate_model(model, X_test: pd.DataFrame, y_test: pd.Series) -> dict:
-    """Evaluate model performance."""
-    logger.info("Evaluating model on test set...")
+def train_tuned_model(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    model_type: str = "logistic_regression",
+    scoring: str = "roc_auc",
+    cv: int = 5,
+    random_state: int = 42,
+):
+    """Train a model with hyperparameter tuning using GridSearchCV.
 
-    y_pred = model.predict(X_test)
-    y_pred_proba = model.predict_proba(X_test)[:, 1]
+    Args:
+        X_train: Training features.
+        y_train: Training labels.
+        model_type: Type of model ('logistic_regression' or 'random_forest').
+        scoring: Metric to optimize ('roc_auc', 'f1', 'accuracy', 'precision', 'recall').
+        cv: Number of cross-validation folds.
+        random_state: Random seed for reproducibility.
+
+    Returns:
+        Tuple of (best_model, best_params, cv_results).
+    """
+    logger.info(f"Tuning {model_type} model with GridSearchCV (scoring={scoring}, cv={cv})...")
+
+    if model_type == "logistic_regression":
+        base_model = LogisticRegression(
+            random_state=random_state, class_weight="balanced", max_iter=2000
+        )
+        param_grid = {
+            "C": [0.01, 0.1, 1.0, 10.0, 100.0],
+            "solver": ["lbfgs", "saga"],
+            "penalty": ["l2"],
+        }
+    elif model_type == "random_forest":
+        base_model = RandomForestClassifier(
+            random_state=random_state, class_weight="balanced", n_jobs=-1
+        )
+        param_grid = {
+            "n_estimators": [50, 100, 200],
+            "max_depth": [5, 10, 20, None],
+            "min_samples_split": [2, 5, 10],
+        }
+    else:
+        raise ValueError(f"Unsupported model_type: {model_type}")
+
+    grid_search = GridSearchCV(
+        estimator=base_model,
+        param_grid=param_grid,
+        scoring=scoring,
+        cv=cv,
+        n_jobs=-1,
+        verbose=1,
+        return_train_score=True,
+    )
+
+    grid_search.fit(X_train, y_train)
+
+    logger.success(f"Best {scoring}: {grid_search.best_score_:.4f}")
+    logger.info(f"Best parameters: {grid_search.best_params_}")
+
+    return grid_search.best_estimator_, grid_search.best_params_, grid_search.cv_results_
+
+
+def evaluate_model(model, X: pd.DataFrame, y: pd.Series, split_name: str = "test") -> dict:
+    """Evaluate model performance on a given split."""
+    logger.info(f"Evaluating model on {split_name} set...")
+
+    y_pred = model.predict(X)
+    y_pred_proba = model.predict_proba(X)[:, 1]
 
     metrics = {
-        "accuracy": accuracy_score(y_test, y_pred),
-        "precision": precision_score(y_test, y_pred),
-        "recall": recall_score(y_test, y_pred),
-        "f1_score": f1_score(y_test, y_pred),
-        "roc_auc": roc_auc_score(y_test, y_pred_proba),
+        "accuracy": accuracy_score(y, y_pred),
+        "precision": precision_score(y, y_pred),
+        "recall": recall_score(y, y_pred),
+        "f1_score": f1_score(y, y_pred),
+        "roc_auc": roc_auc_score(y, y_pred_proba),
     }
 
-    logger.info("=" * 60)
-    logger.info("MODEL PERFORMANCE METRICS")
-    logger.info("=" * 60)
+    logger.info(f"{split_name.upper()} SET METRICS")
     for metric_name, metric_value in metrics.items():
         logger.info(f"{metric_name.upper()}: {metric_value:.4f}")
 
-    logger.info("\nConfusion Matrix:")
-    cm = confusion_matrix(y_test, y_pred)
+    logger.info(f"\n{split_name.title()} Confusion Matrix:")
+    cm = confusion_matrix(y, y_pred)
     logger.info(f"\n{cm}")
 
-    logger.info("\nClassification Report:")
-    logger.info(f"\n{classification_report(y_test, y_pred)}")
+    logger.info(f"\n{split_name.title()} Classification Report:")
+    logger.info(f"\n{classification_report(y, y_pred)}")
 
     return metrics
 
@@ -154,9 +214,12 @@ def main(
     test_size: float = 0.2,
     random_state: int = 42,
     save_features: bool = True,
+    tune: bool = False,
+    scoring: str = "roc_auc",
+    cv: int = 5,
 ):
     """
-    Train a baseline model to predict purchase intent.
+    Train a model to predict purchase intent.
 
     Args:
         raw_data_path: Path to raw clickstream data
@@ -166,10 +229,11 @@ def main(
         test_size: Fraction of data to use for testing
         random_state: Random seed for reproducibility
         save_features: Whether to save features and labels to processed data directory
+        tune: Enable hyperparameter tuning with GridSearchCV
+        scoring: Metric to optimize when tuning ('roc_auc', 'f1', 'accuracy', 'precision', 'recall')
+        cv: Number of cross-validation folds for tuning
     """
-    logger.info("=" * 60)
-    logger.info("BASELINE MODEL TRAINING PIPELINE")
-    logger.info("=" * 60)
+    logger.info("MODEL TRAINING PIPELINE" + (" (with tuning)" if tune else " (baseline)"))
 
     features, labels = load_and_prepare_data(raw_data_path, n_clicks=n_clicks)
 
@@ -186,9 +250,27 @@ def main(
         features, labels, test_size=test_size, random_state=random_state
     )
 
-    model = train_baseline_model(X_train, y_train, model_type=model_type, random_state=random_state)
+    best_params = None
+    if tune:
+        model, best_params, cv_results = train_tuned_model(
+            X_train, y_train,
+            model_type=model_type,
+            scoring=scoring,
+            cv=cv,
+            random_state=random_state,
+        )
+    else:
+        model = train_baseline_model(X_train, y_train, model_type=model_type, random_state=random_state)
 
-    metrics = evaluate_model(model, X_test, y_test)
+    train_metrics = evaluate_model(model, X_train, y_train, split_name="train")
+    test_metrics = evaluate_model(model, X_test, y_test, split_name="test")
+
+    logger.info("TRAIN vs TEST COMPARISON")
+    for metric_name in train_metrics:
+        train_val = train_metrics[metric_name]
+        test_val = test_metrics[metric_name]
+        diff = train_val - test_val
+        logger.info(f"{metric_name.upper()}: Train={train_val:.4f}, Test={test_val:.4f}, Diff={diff:+.4f}")
 
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, model_path)
@@ -196,9 +278,18 @@ def main(
 
     metrics_path = model_path.parent / f"{model_path.stem}_metrics.txt"
     with open(metrics_path, "w") as f:
-        f.write("MODEL PERFORMANCE METRICS\n")
-        f.write("=" * 60 + "\n")
-        for metric_name, metric_value in metrics.items():
+        f.write("MODEL PERFORMANCE METRICS\n\n")
+        if best_params:
+            f.write(f"TUNING: scoring={scoring}, cv={cv}\n")
+            f.write("BEST PARAMETERS\n")
+            for param_name, param_value in best_params.items():
+                f.write(f"{param_name}: {param_value}\n")
+            f.write("\n")
+        f.write("TRAIN SET\n")
+        for metric_name, metric_value in train_metrics.items():
+            f.write(f"{metric_name.upper()}: {metric_value:.4f}\n")
+        f.write("\nTEST SET\n")
+        for metric_name, metric_value in test_metrics.items():
             f.write(f"{metric_name.upper()}: {metric_value:.4f}\n")
     logger.info(f"Metrics saved to {metrics_path}")
 

@@ -18,9 +18,7 @@ print(f"\nOriginal data shape: {clickstream.shape}")
 print(f"First few rows:\n{clickstream.head()}\n")
 
 # 1. FEATURE ENGINEERING
-print("=" * 60)
 print("1. FEATURE ENGINEERING")
-print("=" * 60)
 print("Building session features from first 5 clicks per session...")
 features = build_session_features(clickstream, n_clicks=5)
 
@@ -30,9 +28,7 @@ print(f"\nFeature columns:\n{list(features.columns)}\n")
 print(f"Sample features for first 3 sessions:\n{features.head(3)}\n")
 
 # 2. LABELING
-print("=" * 60)
 print("2. LABELING (Intent Prediction)")
-print("=" * 60)
 print("Generating labels using ProxyHybridIntentLabelStrategy...")
 print("(Sessions with 8+ clicks AND 50%+ high-price items = intent to purchase)")
 
@@ -54,9 +50,7 @@ print(labels["label_source"].value_counts())
 print(f"\nSample labels:\n{labels.head(10)}\n")
 
 # 3. COMBINED DATASET
-print("=" * 60)
 print("3. COMBINED FEATURES + LABELS")
-print("=" * 60)
 dataset = features.merge(labels, on="session_id", how="left")
 print(f"Combined dataset shape: {dataset.shape}")
 print(f"\nSample combined data:\n{dataset.head()}\n")
