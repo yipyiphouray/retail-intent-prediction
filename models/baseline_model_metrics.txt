@@ -1,0 +1,7 @@
+MODEL PERFORMANCE METRICS
+============================================================
+ACCURACY: 0.7528
+PRECISION: 0.3985
+RECALL: 0.9525
+F1_SCORE: 0.5619
+ROC_AUC: 0.8913
