@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 
 """Preprocessing module for retail intent prediction data."""
 
@@ -50,15 +49,10 @@ id_to_country = {
     44: "com (*.com)",
     45: "int (*.int)",
     46: "net (*.net)",
-    47: "org (*.org)"
+    47: "org (*.org)",
 }
 
-id_to_category = {
-    1: "trousers",
-    2: "skirts",
-    3: "blouses",
-    4: "sale"
-}
+id_to_category = {1: "trousers", 2: "skirts", 3: "blouses", 4: "sale"}
 
 id_to_color = {
     1: "beige",
@@ -74,7 +68,7 @@ id_to_color = {
     11: "pink",
     12: "red",
     13: "violet",
-    14: "white"
+    14: "white",
 }
 
 id_to_position = {
@@ -83,73 +77,73 @@ id_to_position = {
     3: "top right",
     4: "bottom left",
     5: "bottom in the middle",
-    6: "bottom right"
+    6: "bottom right",
 }
 
 
 def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
     """
     Preprocess retail data for modeling.
-    
+
     Args:
         df: Input DataFrame with raw retail data.
-        
+
     Returns:
         Cleaned and preprocessed DataFrame.
     """
-    
+
     # Drop 'year' column since it has only one unique value
-    df.drop(columns=['year'], inplace=True)
-    
+    df.drop(columns=["year"], inplace=True)
+
     # month & day column in Integer: 4-8 & 1-31
-    df['month'] = df['month'].astype(int)
-    df['day'] = df['day'].astype(int)
-    
+    df["month"] = df["month"].astype(int)
+    df["day"] = df["day"].astype(int)
+
     # order column in Integer: 0-1
-    df['order'] = df['order'].astype(int)
-    
+    df["order"] = df["order"].astype(int)
+
     # map country column to actual country names
-    df['country'] = df['country'].map(id_to_country)
+    df["country"] = df["country"].map(id_to_country)
     # df = pd.get_dummies(df, columns=['country']) # create one hot encoding for the country column
-    
+
     # session ID column in Integer
-    df['session ID'] = df['session ID'].astype(int)
-    
-    # map main category to actual category 
-    df['main_category'] = df['page 1 (main category)'].map(id_to_category)
-    df.drop(columns = ['page 1 (main category)'], inplace = True)
-    
+    df["session ID"] = df["session ID"].astype(int)
+
+    # map main category to actual category
+    df["main_category"] = df["page 1 (main category)"].map(id_to_category)
+    df.drop(columns=["page 1 (main category)"], inplace=True)
+
     # Page 2 clothing model: 217 unique values, no mapping provided, so we will drop this column for now
-    #df.drop(columns = ['page 2 (clothing model)'], inplace = True)
-    
+    # df.drop(columns = ['page 2 (clothing model)'], inplace = True)
+
     # map color column to actual color names
-    df['colour'] = df['colour'].astype(int)
-    df['colour'] = df['colour'].map(id_to_color)
-    
+    df["colour"] = df["colour"].astype(int)
+    df["colour"] = df["colour"].map(id_to_color)
+
     # map model photography column to actual photography types
-    df['model photography'] = df['model photography'].astype(int)
-    df['model photography'] = df['model photography'].map({1: "en face", 2: "profile"})
-    
+    df["model photography"] = df["model photography"].astype(int)
+    df["model photography"] = df["model photography"].map({1: "en face", 2: "profile"})
+
     # convert price to int
-    df['price'] = df['price'].astype(int)
-    
+    df["price"] = df["price"].astype(int)
+
     # rename price 2 to higher_than_average, 1 as True, 2 as false
-    df['higher_than_average'] = df['price 2'].map({1: 1, 2: 0})
-    df.drop(columns=['price 2'], inplace=True)
-    
+    df["higher_than_average"] = df["price 2"].map({1: 1, 2: 0})
+    df.drop(columns=["price 2"], inplace=True)
+
     # convert page to int
-    df['page'] = df['page'].astype(int)
+    df["page"] = df["page"].astype(int)
     return df
 
 
-# main 
+# main
 def main():
     # Example usage
     raw_data_path = "data/raw/e-shop clothing 2008.csv"
-    df_raw = pd.read_csv(raw_data_path,sep = ";")
-    
+    df_raw = pd.read_csv(raw_data_path, sep=";")
+
     df_processed = preprocess_data(df_raw)
-    
+
     # Save processed data
     processed_data_path = "data/processed/e-shop clothing 2008.csv"
     df_processed.to_csv(processed_data_path, index=False)
