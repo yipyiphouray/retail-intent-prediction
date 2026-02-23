@@ -2,6 +2,30 @@
 
 End-to-end ML pipeline to predict purchase intent from online retail sessions.
 
+## Story So Far
+
+We started with a raw, click-level dataset and a simple question: can the first
+few clicks of a session tell us who is likely to buy? The team aligned on a
+leakage-safe approach, building **session-level features from the first N clicks**
+while reserving **full-session context for labels**. That split let us move fast
+without leaking future behavior into the model.
+
+From there, we built a labeling system that supports proxy labels today and
+manual/cluster labels tomorrow, keeping the schema stable as the strategy
+evolves. We benchmarked baselines (Logistic Regression and Random Forest) to
+establish an initial performance floor, then expanded to bagging ensembles for
+stronger lift and comparability across model families.
+
+To make this useful beyond the notebook, we built a clustering workflow to
+summarize sessions, support manual labeling at scale, and generate exports for
+sequence-model handoff. In parallel, the team documented the business context
+(Poland-first, CEE-aware), defined stakeholder ownership, and framed KPI
+guardrails to keep the model tied to real operating decisions.
+
+Everything below captures the current state of that journey: how to run the
+pipeline, how the features and labels are defined, where the models live, and
+how the business case is structured.
+
 ## Team Setup
 
 This project uses a local virtual environment (`.venv`) managed by `uv`.
@@ -88,12 +112,68 @@ Outputs are written to `models/`:
 
 Session clustering and manual cluster-label propagation are documented in:
 
-- `docs/cluster_labeling.md`
+- `docs/CLUSTER_LABELING.md`
 
 Key outputs:
 
 - Session-level clustering exports: `data/cluster_outputs/`
 - Clustering metrics and artifacts: `models/`
+
+## Feature Engineering
+
+Session-level feature construction (first-N clicks only) is documented in:
+
+- `docs/FEATURE_ENGINEERING.md`
+
+Key points:
+
+- Builds one row per `session_id` from the first `N` clicks to prevent leakage.
+- Supports column normalization from raw UCI schema.
+- Writes features to `data/processed/features.csv` via `online_retail_prediction/features.py`.
+
+## Labeling Strategies
+
+Session-level intent labeling (full-session context) is documented in:
+
+- `docs/LABELING.md`
+
+Key points:
+
+- Strategy-based labeling (`ProxyHybrid`, `ExternalPartial`, `Override`).
+- Standard output schema: `session_id`, `label`, `label_source`, `label_confidence`.
+- Writes labels to `data/processed/labels.csv` via `online_retail_prediction/features.py`.
+
+## Baseline Model Comparison
+
+Baseline model evaluation and metrics are documented in:
+
+- `docs/model_comparison.md`
+
+Summary:
+
+- Logistic Regression and Random Forest baselines on 27 engineered features.
+- Random Forest is the best baseline by accuracy/F1 while LR has higher recall.
+
+## Business Context and Value Proposition (Issue #10)
+
+Business context, market sizing, stakeholder map, and KPI framework:
+
+- `reports/issue-10-business-context.md`
+- `reports/issue-10-business-context-presentation.md`
+
+Highlights:
+
+- Poland-first operating context with CEE comparator markets.
+- Clear constraints from the source dataset and governance guardrails.
+- 90-day execution plan with KPI placeholders.
+
+## Docs Site (MkDocs)
+
+Project docs are maintained under `docs/` (MkDocs structure):
+
+- `docs/README.md` (build/serve instructions)
+- `docs/docs/index.md` (landing page)
+- `docs/docs/getting-started.md` (setup placeholder)
 
 ## Daily Development Workflow
 
