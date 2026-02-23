@@ -46,6 +46,17 @@ make data      # run dataset pipeline entrypoint
 make clean     # remove Python cache artifacts
 ```
 
+## Cluster Labeling Workflow
+
+Session clustering and manual cluster-label propagation are documented in:
+
+- `docs/cluster_labeling.md`
+
+Key outputs:
+
+- Session-level clustering exports: `data/cluster_outputs/`
+- Clustering metrics and artifacts: `models/`
+
 ## Daily Development Workflow
 
 1. Start from integration branch:
