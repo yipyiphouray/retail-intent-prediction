@@ -46,6 +46,44 @@ make data      # run dataset pipeline entrypoint
 make clean     # remove Python cache artifacts
 ```
 
+## Bagging Model Training
+
+Train and fine-tune bagging classifiers (base estimators: logistic regression, decision tree, and KNN)
+using processed features/labels:
+
+```bash
+uv run python -m online_retail_prediction.modeling.bagging_train
+```
+
+Optional arguments:
+
+```bash
+uv run python -m online_retail_prediction.modeling.bagging_train \
+    --features-path data/processed/features.csv \
+    --labels-path data/processed/labels.csv \
+    --output-dir models \
+    --test-size 0.2 \
+    --cv 5 \
+    --random-state 42
+```
+
+Fine-tuning is optimized on ROC-AUC only. Evaluation reports:
+
+- ROC-AUC
+- Precision
+- Recall
+- F1
+- Macro-F1
+- Cohen's Kappa
+- Accuracy
+
+Outputs are written to `models/`:
+
+- `bagging_logistic_regression.pkl` and `bagging_logistic_regression_metrics.txt`
+- `bagging_decision_tree.pkl` and `bagging_decision_tree_metrics.txt`
+- `bagging_knn.pkl` and `bagging_knn_metrics.txt`
+- `bagging_model_comparison.csv`
+
 ## Cluster Labeling Workflow
 
 Session clustering and manual cluster-label propagation are documented in:
