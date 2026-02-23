@@ -1,9 +1,10 @@
 from pathlib import Path
 
 import joblib
+from loguru import logger
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from loguru import logger
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
@@ -16,9 +17,18 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 import typer
 
-from online_retail_prediction.config import MODELS_DIR, PROCESSED_DATA_DIR, RAW_DATA_DIR
+from online_retail_prediction.config import (
+    FIGURES_DIR,
+    MODELS_DIR,
+    PROCESSED_DATA_DIR,
+    RAW_DATA_DIR,
+    REPORTS_DIR,
+)
 from online_retail_prediction.modeling.feature_engineering import build_session_features
 from online_retail_prediction.modeling.labeling import (
     ProxyHybridIntentLabelStrategy,
@@ -26,6 +36,15 @@ from online_retail_prediction.modeling.labeling import (
 )
 
 app = typer.Typer()
+
+SUPPORTED_MODEL_TYPES = [
+    "logistic_regression",
+    "random_forest",
+    "knn",
+    "xgboost",
+    "lightgbm",
+    "all",
+]
 
 
 def load_and_prepare_data(
@@ -104,6 +123,36 @@ def train_baseline_model(
             max_depth=10,
             random_state=random_state,
             class_weight="balanced",
+            n_jobs=-1,
+        )
+    elif model_type == "knn":
+        model = Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                ("classifier", KNeighborsClassifier(n_neighbors=15, weights="distance")),
+            ]
+        )
+    elif model_type == "xgboost":
+        from xgboost import XGBClassifier
+
+        model = XGBClassifier(
+            n_estimators=250,
+            max_depth=6,
+            learning_rate=0.05,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            eval_metric="logloss",
+            random_state=random_state,
+            n_jobs=-1,
+        )
+    elif model_type == "lightgbm":
+        from lightgbm import LGBMClassifier
+
+        model = LGBMClassifier(
+            n_estimators=250,
+            learning_rate=0.05,
+            num_leaves=31,
+            random_state=random_state,
             n_jobs=-1,
         )
     else:
@@ -205,6 +254,80 @@ def evaluate_model(model, X: pd.DataFrame, y: pd.Series, split_name: str = "test
     return metrics
 
 
+def run_model_comparison(
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    y_train: pd.Series,
+    y_test: pd.Series,
+    random_state: int,
+) -> pd.DataFrame:
+    model_types = [
+        "logistic_regression",
+        "random_forest",
+        "knn",
+        "xgboost",
+        "lightgbm",
+    ]
+    rows: list[dict[str, float | str]] = []
+
+    for model_type in model_types:
+        model = train_baseline_model(X_train, y_train, model_type=model_type, random_state=random_state)
+        train_metrics = evaluate_model(model, X_train, y_train, split_name=f"{model_type}_train")
+        test_metrics = evaluate_model(model, X_test, y_test, split_name=f"{model_type}_test")
+
+        rows.append(
+            {
+                "model": model_type,
+                "train_accuracy": train_metrics["accuracy"],
+                "test_accuracy": test_metrics["accuracy"],
+                "train_precision": train_metrics["precision"],
+                "test_precision": test_metrics["precision"],
+                "train_recall": train_metrics["recall"],
+                "test_recall": test_metrics["recall"],
+                "train_f1": train_metrics["f1_score"],
+                "test_f1": test_metrics["f1_score"],
+                "train_roc_auc": train_metrics["roc_auc"],
+                "test_roc_auc": test_metrics["roc_auc"],
+            }
+        )
+
+        model_output_path = MODELS_DIR / f"{model_type}_model.pkl"
+        joblib.dump(model, model_output_path)
+        logger.info(f"Saved model artifact to {model_output_path}")
+
+    results = pd.DataFrame(rows)
+    results = results.sort_values("test_roc_auc", ascending=False).reset_index(drop=True)
+
+    logger.info("MODEL COMPARISON (sorted by test_roc_auc)")
+    logger.info("\n" + results.to_string(index=False, float_format=lambda value: f"{value:.4f}"))
+
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+
+    comparison_csv = REPORTS_DIR / "model_comparison_baseline.csv"
+    results.to_csv(comparison_csv, index=False)
+    logger.success(f"Saved comparison table to {comparison_csv}")
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(results["model"], results["test_roc_auc"], marker="o", label="Test ROC-AUC")
+    plt.plot(results["model"], results["test_f1"], marker="s", label="Test F1")
+    plt.plot(results["model"], results["test_accuracy"], marker="^", label="Test Accuracy")
+    plt.ylim(0.0, 1.0)
+    plt.ylabel("Score")
+    plt.xlabel("Model")
+    plt.title("Baseline Model Comparison")
+    plt.grid(alpha=0.25)
+    plt.legend()
+    plt.tight_layout()
+
+    comparison_png = FIGURES_DIR / "model_comparison_baseline.png"
+    plt.savefig(comparison_png, dpi=180)
+    plt.close()
+    logger.success(f"Saved comparison plot to {comparison_png}")
+
+    return results
+
+
 @app.command()
 def main(
     raw_data_path: Path = RAW_DATA_DIR / "e-shop clothing 2008.csv",
@@ -224,7 +347,8 @@ def main(
     Args:
         raw_data_path: Path to raw clickstream data
         model_path: Path to save trained model
-        model_type: Type of model ('logistic_regression' or 'random_forest')
+        model_type: Type of model ('logistic_regression', 'random_forest', 'knn',
+            'xgboost', 'lightgbm', or 'all' for full comparison)
         n_clicks: Number of initial clicks to use for features
         test_size: Fraction of data to use for testing
         random_state: Random seed for reproducibility
@@ -234,6 +358,10 @@ def main(
         cv: Number of cross-validation folds for tuning
     """
     logger.info("MODEL TRAINING PIPELINE" + (" (with tuning)" if tune else " (baseline)"))
+
+    model_type = model_type.strip().lower()
+    if model_type not in SUPPORTED_MODEL_TYPES:
+        raise ValueError(f"Unsupported model_type: {model_type}. Use one of {SUPPORTED_MODEL_TYPES}.")
 
     features, labels = load_and_prepare_data(raw_data_path, n_clicks=n_clicks)
 
@@ -250,8 +378,21 @@ def main(
         features, labels, test_size=test_size, random_state=random_state
     )
 
+    if model_type == "all":
+        run_model_comparison(
+            X_train=X_train,
+            X_test=X_test,
+            y_train=y_train,
+            y_test=y_test,
+            random_state=random_state,
+        )
+        logger.success("All-model comparison complete!")
+        return
+
     best_params = None
     if tune:
+        if model_type not in {"logistic_regression", "random_forest"}:
+            raise ValueError("Tuning is currently supported only for logistic_regression and random_forest")
         model, best_params, cv_results = train_tuned_model(
             X_train, y_train,
             model_type=model_type,
