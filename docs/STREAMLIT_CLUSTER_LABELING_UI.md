@@ -10,6 +10,12 @@ The app runs clustering on startup, displays cluster summary features, and saves
 
 - `data/cluster_outputs/cluster_label.csv`
 
+It also surfaces:
+
+- selected-feature-focused cluster summary (from `selected_features.json` when available)
+- business-facing cluster descriptions (from `cluster_interpretations.csv` when available)
+- visual diagnostics (positioning map + engagement comparison)
+
 ## Prerequisites
 
 1. From repo root, sync environment:
@@ -53,10 +59,11 @@ Open:
 ## How To Use
 
 1. App starts and automatically runs clustering once.
-2. Left panel shows cluster summary table (`cluster_summary.csv` fields).
+2. Left panel shows cluster summary with selected features when available.
 3. Right panel shows one label selector per cluster (`Cluster 0`, `Cluster 1`, ...).
-4. Select `low-intent` or `high-intent` for every cluster.
-5. Click **Save**.
+4. Review the Cluster Descriptions cards and the two visual diagnostics.
+5. Select `low-intent` or `high-intent` for every cluster.
+6. Click **Save**.
 
 If any cluster is unlabeled, Save stays disabled and the app shows which clusters are missing.
 
@@ -72,6 +79,15 @@ Output schema:
 - `intent_label` (`low-intent` or `high-intent`)
 
 Rows are saved sorted by `cluster_id`.
+
+## Optional Supporting Artifacts Read By The UI
+
+The app reads these files when present and degrades gracefully when they are missing:
+
+- `data/cluster_outputs/selected_features.json`
+- `data/cluster_outputs/cluster_interpretations.csv`
+- `data/cluster_outputs/cluster_positioning_map.png` (fallback image)
+- `data/cluster_outputs/engagement_comparison.png` (fallback image)
 
 ## Refresh Clustering
 

@@ -1,0 +1,9 @@
+cluster_id,intent_label
+0,low-intent
+1,high-intent
+2,high-intent
+3,low-intent
+4,high-intent
+5,low-intent
+6,low-intent
+7,low-intent

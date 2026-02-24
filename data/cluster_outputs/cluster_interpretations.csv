@@ -1,0 +1,9 @@
+cluster_id,cluster_label,cluster_size_pct,business_intent
+0,Blouse-Focused Evaluators,10.9%,"Blouse-oriented shoppers evaluating a shortlist with moderate comparison, not an immediate disappointment pattern."
+1,Deep Cross-Category Researchers,13.8%,"Exhaustive cross-category researchers with very high deliberation intensity before narrowing, clearly deeper than Cluster 5."
+2,Focused Sale Browsers,10.3%,"Deal-focused shoppers browsing sale inventory with moderate depth and a purposeful, low-friction pattern."
+3,Quick Trouser Validators,8.4%,Quick trouser checkers doing brief validation on familiar low-price options; many sessions appear unconvinced and exit quickly.
+4,Premium Trouser Comparers,12.9%,High-consideration shoppers comparing premium trouser options with focused within-category decision behavior.
+5,Engaged Multi-Category Explorers,21.2%,"Broad multi-category explorers with moderate-to-high engagement, but not the exhaustive deep-research behavior seen in Cluster 1."
+6,Budget Quick Viewers,7.3%,"Low-intent budget visitors with strong quick-exit disappointment signals (not impressed, minimal exploration, rapid leave)."
+7,Premium Skirt-Focused Shoppers,15.2%,Premium skirt-focused shoppers making targeted within-category comparisons with limited cross-category exploration.
