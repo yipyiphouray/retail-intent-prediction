@@ -26,6 +26,30 @@ Everything below captures the current state of that journey: how to run the
 pipeline, how the features and labels are defined, where the models live, and
 how the business case is structured.
 
+## Story So Far
+
+We started with a raw, click-level dataset and a simple question: can the first
+few clicks of a session tell us who is likely to buy? The team aligned on a
+leakage-safe approach, building **session-level features from the first N clicks**
+while reserving **full-session context for labels**. That split let us move fast
+without leaking future behavior into the model.
+
+From there, we built a labeling system that supports proxy labels today and
+manual/cluster labels tomorrow, keeping the schema stable as the strategy
+evolves. We benchmarked baselines (Logistic Regression and Random Forest) to
+establish an initial performance floor, then expanded to bagging ensembles for
+stronger lift and comparability across model families.
+
+To make this useful beyond the notebook, we built a clustering workflow to
+summarize sessions, support manual labeling at scale, and generate exports for
+sequence-model handoff. In parallel, the team documented the business context
+(Poland-first, CEE-aware), defined stakeholder ownership, and framed KPI
+guardrails to keep the model tied to real operating decisions.
+
+Everything below captures the current state of that journey: how to run the
+pipeline, how the features and labels are defined, where the models live, and
+how the business case is structured.
+
 ## Team Setup
 
 This project uses a local virtual environment (`.venv`) managed by `uv`.
@@ -108,6 +132,26 @@ Outputs are written to `models/`:
 - `bagging_knn.pkl` and `bagging_knn_metrics.txt`
 - `bagging_model_comparison.csv`
 
+### Bagging Metrics (from `models/`)
+
+Bagging + Logistic Regression (`models/bagging_logistic_regression_metrics.txt`, test set):
+
+- Accuracy: 0.7524
+- Precision: 0.3978
+- Recall: 0.9488
+- F1: 0.5606
+- ROC-AUC: 0.8909
+- Best CV ROC-AUC: 0.8971
+
+Bagging + Decision Tree (`models/bagging_decision_tree_metrics.txt`, test set):
+
+- Accuracy: 0.7665
+- Precision: 0.4113
+- Recall: 0.9338
+- F1: 0.5711
+- ROC-AUC: 0.8919
+- Best CV ROC-AUC: 0.8966
+
 ## Cluster Labeling Workflow
 
 Session clustering and manual cluster-label propagation are documented in:
@@ -118,6 +162,19 @@ Key outputs:
 
 - Session-level clustering exports: `data/cluster_outputs/`
 - Clustering metrics and artifacts: `models/`
+
+### Clustering Metrics (from `models/`)
+
+From `models/clustering_metrics.json`:
+
+- k: 10
+- Sessions: 24,026
+- Features used: 15
+- Inertia: 171,549.9455
+- Silhouette: 0.1819
+- Calinski-Harabasz: 2,937.3955
+- Davies-Bouldin: 1.7086
+- Largest cluster share: 17.16%
 
 ## Feature Engineering
 
@@ -153,6 +210,24 @@ Summary:
 
 - Logistic Regression and Random Forest baselines on 27 engineered features.
 - Random Forest is the best baseline by accuracy/F1 while LR has higher recall.
+
+### Baseline Metrics (from `models/`)
+
+Logistic Regression (`models/baseline_model_metrics.txt`):
+
+- Accuracy: 0.7528
+- Precision: 0.3985
+- Recall: 0.9525
+- F1: 0.5619
+- ROC-AUC: 0.8913
+
+Random Forest (`models/baseline_rf_model_metrics.txt`):
+
+- Accuracy: 0.7834
+- Precision: 0.4286
+- Recall: 0.9038
+- F1: 0.5814
+- ROC-AUC: 0.8920
 
 ## Business Context and Value Proposition (Issue #10)
 
