@@ -69,6 +69,76 @@ def _prepare_clickstream(df: pd.DataFrame) -> pd.DataFrame:
     return cleaned.sort_values(["session_id", "order"]).reset_index(drop=True)
 
 
+def _cumul_nunique(series: pd.Series) -> pd.Series:
+    """Return the cumulative count of unique values seen so far (inclusive)."""
+    seen: set = set()
+    counts = []
+    for val in series:
+        seen.add(val)
+        counts.append(len(seen))
+    return pd.Series(counts, index=series.index, dtype=int)
+
+
+def _is_revisit(series: pd.Series) -> pd.Series:
+    """Return 1 if the value has appeared earlier in the series, else 0."""
+    seen: set = set()
+    flags = []
+    for val in series:
+        flags.append(1 if val in seen else 0)
+        seen.add(val)
+    return pd.Series(flags, index=series.index, dtype=int)
+
+
+def _enrich_clicks_sequential(df: pd.DataFrame) -> pd.DataFrame:
+    """Add click-level sequential features within each session.
+
+    Expects a DataFrame already sorted by [session_id, order].
+    Adds change/transition flags, cumulative stats, revisit indicators,
+    and normalised click position.
+    """
+    enriched = df.copy()
+    g = enriched.groupby("session_id", group_keys=False)
+
+    # --- Change / transition flags ---
+    enriched["category_changed"] = g["main_category"].transform(
+        lambda s: s.ne(s.shift()).astype(int)
+    )
+    enriched["colour_changed"] = g["colour"].transform(lambda s: s.ne(s.shift()).astype(int))
+    enriched["model_changed"] = g["page_2_model"].transform(lambda s: s.ne(s.shift()).astype(int))
+    # First click in each session should be 0, not 1
+    first_mask = g.cumcount() == 0
+    enriched.loc[first_mask, "category_changed"] = 0
+    enriched.loc[first_mask, "colour_changed"] = 0
+    enriched.loc[first_mask, "model_changed"] = 0
+
+    enriched["price_diff"] = g["price"].transform(lambda s: s.diff().fillna(0.0))
+    enriched["price_direction"] = np.sign(enriched["price_diff"]).astype(int)
+
+    # --- Cumulative / running stats ---
+    enriched["cumul_unique_categories"] = g["main_category"].transform(_cumul_nunique)
+    enriched["cumul_unique_models"] = g["page_2_model"].transform(_cumul_nunique)
+    enriched["cumul_unique_colours"] = g["colour"].transform(_cumul_nunique)
+
+    enriched["cumul_mean_price"] = g["price"].transform(lambda s: s.expanding().mean())
+    enriched["price_vs_cumul_mean"] = enriched["price"] - enriched["cumul_mean_price"]
+
+    # --- Revisit indicators ---
+    enriched["is_category_revisit"] = g["main_category"].transform(_is_revisit)
+    enriched["is_model_revisit"] = g["page_2_model"].transform(_is_revisit)
+    enriched["is_colour_revisit"] = g["colour"].transform(_is_revisit)
+
+    # --- Position encoding ---
+    session_len = g["order"].transform("count")
+    click_pos = g.cumcount()  # 0-indexed position within session
+    enriched["click_position_norm"] = np.where(
+        session_len > 1,
+        click_pos / (session_len - 1),
+        0.0,
+    )
+
+    return enriched
+
+
 def _category_entropy(values: pd.Series) -> float:
     probabilities = values.value_counts(normalize=True)
     if probabilities.empty:
@@ -94,6 +164,7 @@ def build_session_features(clickstream: pd.DataFrame, n_clicks: int = 5) -> pd.D
 
     prepared = _prepare_clickstream(clickstream)
     first_n = prepared.groupby("session_id", group_keys=False).head(n_clicks).copy()
+    first_n = _enrich_clicks_sequential(first_n)
 
     grouped = first_n.groupby("session_id")
     features = grouped.agg(
@@ -160,5 +231,46 @@ def build_session_features(clickstream: pd.DataFrame, n_clicks: int = 5) -> pd.D
         lambda values: int(values.ne(values.shift()).sum() - 1)
     )
     features["category_transition_count"] = transitions.clip(lower=0)
+
+    # --- Aggregations of sequential click-level features ---
+    seq_agg = first_n.groupby("session_id").agg(
+        category_switch_rate=("category_changed", "mean"),
+        colour_switch_rate=("colour_changed", "mean"),
+        model_switch_rate=("model_changed", "mean"),
+        mean_price_diff=("price_diff", "mean"),
+        std_price_diff=("price_diff", "std"),
+        mean_price_deviation=("price_vs_cumul_mean", "mean"),
+        category_revisit_rate=("is_category_revisit", "mean"),
+        model_revisit_rate=("is_model_revisit", "mean"),
+        colour_revisit_rate=("is_colour_revisit", "mean"),
+    )
+    seq_agg["std_price_diff"] = seq_agg["std_price_diff"].fillna(0.0)
+
+    # max absolute price change across clicks
+    seq_agg["max_abs_price_diff"] = (
+        first_n.assign(abs_price_diff=lambda d: d["price_diff"].abs())
+        .groupby("session_id")["abs_price_diff"]
+        .max()
+    )
+
+    # counts of price direction
+    seq_agg["n_price_increases"] = first_n.groupby("session_id")["price_direction"].apply(
+        lambda s: (s > 0).sum()
+    )
+    seq_agg["n_price_decreases"] = first_n.groupby("session_id")["price_direction"].apply(
+        lambda s: (s < 0).sum()
+    )
+
+    # Exploration velocity: how early diversity was discovered.
+    # mean(cumul_unique) / max(cumul_unique) — closer to 1 means early discovery.
+    for col, name in [
+        ("cumul_unique_categories", "exploration_velocity_categories"),
+        ("cumul_unique_models", "exploration_velocity_models"),
+    ]:
+        col_max = first_n.groupby("session_id")[col].max()
+        col_mean = first_n.groupby("session_id")[col].mean()
+        seq_agg[name] = np.where(col_max > 0, col_mean / col_max, 0.0)
+
+    features = features.join(seq_agg)
 
     return features.reset_index()
