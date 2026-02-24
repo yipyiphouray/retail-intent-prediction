@@ -218,3 +218,12 @@ Interactive correlation analysis is available in:
 
 Use it to inspect correlation heatmaps, review highly correlated feature pairs, and
 decide which columns to drop before running clustering.
+
+## Cluster interpretation notebook
+
+Business-facing cluster interpretation is available in:
+
+- `notebooks/cluster_interpretation.ipynb`
+
+Use it to turn `cluster_summary.csv` into interpretable customer-segment descriptions using
+CV-based feature selection and cluster profile visualizations.

@@ -136,6 +136,12 @@ Session clustering and manual cluster-label propagation are documented in:
 - `docs/CLUSTER_LABELING.md`
 - `docs/STREAMLIT_CLUSTER_LABELING_UI.md`
 
+Cluster interpretation notebook:
+
+- `notebooks/cluster_interpretation.ipynb`: explains what each k-means cluster means in
+  business terms using `cluster_summary.csv`, CV-based feature selection, and cluster profile
+  visualizations.
+
 Key outputs:
 
 - Session-level clustering exports: `data/cluster_outputs/`
