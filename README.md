@@ -134,6 +134,7 @@ Bagging + Decision Tree (`models/bagging_decision_tree_metrics.txt`, test set):
 Session clustering and manual cluster-label propagation are documented in:
 
 - `docs/CLUSTER_LABELING.md`
+- `docs/STREAMLIT_CLUSTER_LABELING_UI.md`
 
 Key outputs:
 

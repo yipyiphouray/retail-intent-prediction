@@ -49,6 +49,11 @@ format:
 test:
 	$(UV) run pytest tests
 
+## Run Streamlit cluster labeling UI locally
+.PHONY: cluster_ui
+cluster_ui:
+	$(UV) run streamlit run apps/cluster_labeling_app.py
+
 ## Update uv lockfile
 .PHONY: lock
 lock:
