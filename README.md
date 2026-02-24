@@ -146,19 +146,23 @@ Key outputs:
 
 - Session-level clustering exports: `data/cluster_outputs/`
 - Clustering metrics and artifacts: `models/`
+- Interpretation and UI support artifacts:
+  - `data/cluster_outputs/cluster_interpretations.csv`
+  - `data/cluster_outputs/selected_features.json`
+  - `data/cluster_outputs/cluster_label.csv`
 
 ### Clustering Metrics (from `models/`)
 
 From `models/clustering_metrics.json`:
 
-- k: 10
+- k: 8
 - Sessions: 24,026
-- Features used: 15
-- Inertia: 171,549.9455
-- Silhouette: 0.1819
-- Calinski-Harabasz: 2,937.3955
-- Davies-Bouldin: 1.7086
-- Largest cluster share: 17.16%
+- Features used: 17
+- Inertia: 214,544.2956
+- Silhouette: 0.1696
+- Calinski-Harabasz: 3,100.9500
+- Davies-Bouldin: 1.8167
+- Largest cluster share: 21.24%
 
 ## Feature Engineering
 

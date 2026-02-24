@@ -194,10 +194,21 @@ Run:
 ```bash
 uv run python -m online_retail_prediction.modeling.cluster_labeling_cli \
   --features-path data/processed/features_full_session.csv \
-  --manual-labels-path data/cluster_outputs/cluster_labels.csv \
+  --manual-labels-path data/cluster_outputs/cluster_label.csv \
   --label-column intent_label \
   --output-dir data/cluster_outputs
 ```
+
+### Manual labels via Streamlit UI
+
+The Streamlit app writes manual labels to:
+
+- `data/cluster_outputs/cluster_label.csv`
+
+Schema:
+
+- `cluster_id`
+- `intent_label`
 
 ## RNN handoff
 Primary handoff file for sequence model integration:
