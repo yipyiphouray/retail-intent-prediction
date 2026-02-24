@@ -50,7 +50,8 @@ make clean     # remove Python cache artifacts
 
 Session clustering and manual cluster-label propagation are documented in:
 
-- `docs/cluster_labeling.md`
+- `docs/CLUSTER_LABELING.md`
+- `docs/STREAMLIT_CLUSTER_LABELING_UI.md`
 
 Key outputs:
 
