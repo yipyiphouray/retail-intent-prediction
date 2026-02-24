@@ -26,29 +26,6 @@ Everything below captures the current state of that journey: how to run the
 pipeline, how the features and labels are defined, where the models live, and
 how the business case is structured.
 
-## Story So Far
-
-We started with a raw, click-level dataset and a simple question: can the first
-few clicks of a session tell us who is likely to buy? The team aligned on a
-leakage-safe approach, building **session-level features from the first N clicks**
-while reserving **full-session context for labels**. That split let us move fast
-without leaking future behavior into the model.
-
-From there, we built a labeling system that supports proxy labels today and
-manual/cluster labels tomorrow, keeping the schema stable as the strategy
-evolves. We benchmarked baselines (Logistic Regression and Random Forest) to
-establish an initial performance floor, then expanded to bagging ensembles for
-stronger lift and comparability across model families.
-
-To make this useful beyond the notebook, we built a clustering workflow to
-summarize sessions, support manual labeling at scale, and generate exports for
-sequence-model handoff. In parallel, the team documented the business context
-(Poland-first, CEE-aware), defined stakeholder ownership, and framed KPI
-guardrails to keep the model tied to real operating decisions.
-
-Everything below captures the current state of that journey: how to run the
-pipeline, how the features and labels are defined, where the models live, and
-how the business case is structured.
 
 ## Team Setup
 
