@@ -84,8 +84,8 @@ Optional arguments:
 
 ```bash
 uv run python -m online_retail_prediction.modeling.bagging_train \
-    --features-path data/processed/features.csv \
-    --labels-path data/processed/labels.csv \
+    --features-path data/processed/features_first_n.csv \
+    --labels-path data/processed/baseline_labels.csv \
     --output-dir models \
     --test-size 0.2 \
     --cv 5 \
@@ -156,15 +156,15 @@ From `models/clustering_metrics.json`:
 
 ## Feature Engineering
 
-Session-level feature construction (first-N clicks only) is documented in:
+Session-level feature construction (first-N and full-session modes) is documented in:
 
 - `docs/FEATURE_ENGINEERING.md`
 
 Key points:
 
-- Builds one row per `session_id` from the first `N` clicks to prevent leakage.
+- Supports two configurations: first `N` clicks and full-session aggregation.
 - Supports column normalization from raw UCI schema.
-- Writes features to `data/processed/features.csv` via `online_retail_prediction/features.py`.
+- Writes features to `data/processed/features_first_n.csv` and `data/processed/features_full_session.csv` via `online_retail_prediction/features.py`.
 
 ## Labeling Strategies
 
@@ -176,7 +176,7 @@ Key points:
 
 - Strategy-based labeling (`ProxyHybrid`, `ExternalPartial`, `Override`).
 - Standard output schema: `session_id`, `label`, `label_source`, `label_confidence`.
-- Writes labels to `data/processed/labels.csv` via `online_retail_prediction/features.py`.
+- Writes labels to `data/processed/baseline_labels.csv` via `online_retail_prediction/features.py`.
 
 ## Baseline Model Comparison
 

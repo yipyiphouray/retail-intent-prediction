@@ -60,11 +60,17 @@ def get_coefficient_importance(
     else:
         importances = abs_coefficients
 
-    result = pd.DataFrame({
-        "feature": feature_names,
-        "importance": importances,
-        "coefficient": coefficients,
-    }).sort_values("importance", ascending=False).reset_index(drop=True)
+    result = (
+        pd.DataFrame(
+            {
+                "feature": feature_names,
+                "importance": importances,
+                "coefficient": coefficients,
+            }
+        )
+        .sort_values("importance", ascending=False)
+        .reset_index(drop=True)
+    )
 
     return result
 
@@ -95,11 +101,19 @@ def get_shap_importance(
 
     mean_abs_shap = np.abs(shap_values).mean(axis=0)
 
-    result = pd.DataFrame({
-        "feature": X.columns.tolist(),
-        "importance": mean_abs_shap / mean_abs_shap.sum() if mean_abs_shap.sum() > 0 else mean_abs_shap,
-        "mean_abs_shap": mean_abs_shap,
-    }).sort_values("importance", ascending=False).reset_index(drop=True)
+    result = (
+        pd.DataFrame(
+            {
+                "feature": X.columns.tolist(),
+                "importance": mean_abs_shap / mean_abs_shap.sum()
+                if mean_abs_shap.sum() > 0
+                else mean_abs_shap,
+                "mean_abs_shap": mean_abs_shap,
+            }
+        )
+        .sort_values("importance", ascending=False)
+        .reset_index(drop=True)
+    )
 
     return result
 
@@ -208,7 +222,14 @@ def plot_feature_importance(
     fig, ax = plt.subplots(figsize=figsize)
 
     colors = plt.cm.Blues(np.linspace(0.4, 0.8, len(df)))[::-1]
-    bars = ax.barh(df["feature"], df[importance_col], height=0.5, color=colors, edgecolor="black", linewidth=0.5)
+    bars = ax.barh(
+        df["feature"],
+        df[importance_col],
+        height=0.5,
+        color=colors,
+        edgecolor="black",
+        linewidth=0.5,
+    )
 
     ax.set_xlabel("Importance", fontsize=12)
     ax.set_ylabel("Feature", fontsize=12)
@@ -218,8 +239,9 @@ def plot_feature_importance(
     offset = max_val * 0.02  # 2% of max value for proportional spacing
 
     for bar, val in zip(bars, df[importance_col]):
-        ax.text(val + offset, bar.get_y() + bar.get_height() / 2,
-                f"{val:.3f}", va="center", fontsize=9)
+        ax.text(
+            val + offset, bar.get_y() + bar.get_height() / 2, f"{val:.3f}", va="center", fontsize=9
+        )
 
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -236,8 +258,8 @@ def plot_feature_importance(
 
 @app.command()
 def main(
-    features_path: Path = PROCESSED_DATA_DIR / "features.csv",
-    labels_path: Path = PROCESSED_DATA_DIR / "labels.csv",
+    features_path: Path = PROCESSED_DATA_DIR / "features_first_n.csv",
+    labels_path: Path = PROCESSED_DATA_DIR / "baseline_labels.csv",
     model_path: Path = MODELS_DIR / "model.pkl",
     output_path: Path = PROCESSED_DATA_DIR / "feature_importance.csv",
     method: str = "auto",
@@ -285,15 +307,11 @@ def main(
     logger.info("Computing feature importance using '{}' method...", chosen_method)
 
     if chosen_method == "coefficients":
-        importance_df = get_coefficient_importance(
-            model=model, feature_names=X.columns.tolist()
-        )
+        importance_df = get_coefficient_importance(model=model, feature_names=X.columns.tolist())
     elif chosen_method == "shap":
         importance_df = get_shap_importance(model=model, X=X, sample_size=sample_size)
     elif chosen_method == "model":
-        importance_df = get_model_feature_importance(
-            model=model, feature_names=X.columns.tolist()
-        )
+        importance_df = get_model_feature_importance(model=model, feature_names=X.columns.tolist())
     else:
         importance_df = get_permutation_feature_importance(
             model=model,

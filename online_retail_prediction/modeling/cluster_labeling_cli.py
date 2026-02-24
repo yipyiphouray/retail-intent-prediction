@@ -19,7 +19,7 @@ app = typer.Typer()
 
 @app.command()
 def main(
-    features_path: Path = PROCESSED_DATA_DIR / "features.csv",
+    features_path: Path = PROCESSED_DATA_DIR / "features_full_session.csv",
     random_state: int = 42,
     output_dir: Path = DATA_DIR / "cluster_outputs",
     representatives_top_n: int = 5,

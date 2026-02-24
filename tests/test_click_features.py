@@ -183,3 +183,44 @@ def test_session_features_sequential_values() -> None:
     # Session 1: categories trousers, skirts, trousers -> 2/3 switch, 1/3 revisit
     np.testing.assert_allclose(s1["category_switch_rate"], 2 / 3, rtol=1e-6)
     np.testing.assert_allclose(s1["category_revisit_rate"], 1 / 3, rtol=1e-6)
+
+
+def test_full_session_mode_uses_all_clicks_when_more_than_n() -> None:
+    clickstream = _sample_clickstream()
+
+    features_first_n = build_session_features(
+        clickstream=clickstream,
+        n_clicks=2,
+        aggregation_mode="first_n",
+    )
+    features_full = build_session_features(
+        clickstream=clickstream,
+        aggregation_mode="full_session",
+    )
+
+    s1_first_n = features_first_n.loc[features_first_n["session_id"] == 1, "n_clicks_observed"].item()
+    s1_full = features_full.loc[features_full["session_id"] == 1, "n_clicks_observed"].item()
+
+    assert s1_first_n == 2
+    assert s1_full == 3
+
+def test_full_session_mode_excludes_sequential_aggregation_columns() -> None:
+    """Verify that sequential aggregation features are only in first_n mode."""
+    clickstream = _sample_clickstream()
+
+    features_first_n = build_session_features(
+        clickstream=clickstream,
+        aggregation_mode="first_n",
+    )
+    features_full = build_session_features(
+        clickstream=clickstream,
+        aggregation_mode="full_session",
+    )
+
+    # First_n should have all sequential columns
+    for col in EXPECTED_SEQUENTIAL_COLUMNS:
+        assert col in features_first_n.columns, f"Missing in first_n: {col}"
+
+    # Full_session should NOT have any sequential columns
+    for col in EXPECTED_SEQUENTIAL_COLUMNS:
+        assert col not in features_full.columns, f"Should not be in full_session: {col}"

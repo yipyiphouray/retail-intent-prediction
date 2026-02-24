@@ -1,7 +1,3 @@
-# Data artifacts (keep folder scaffold via .gitkeep files)
-data/**
-!data/**/.gitkeep
-
 # Mac OS-specific storage files
 .DS_Store
 

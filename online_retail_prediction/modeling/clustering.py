@@ -56,8 +56,8 @@ class SessionClusterer:
     ) -> tuple[pd.DataFrame, list[str]]:
         if X.empty:
             return X, []
-
-        corr = X.corr(numeric_only=True).abs()
+        scaled = StandardScaler().fit_transform(X)
+        corr = pd.DataFrame(scaled, columns=X.columns, index=X.index).corr(numeric_only=True).abs()
         upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
         drop_cols = [col for col in upper.columns if (upper[col] > threshold).any()]
         if not drop_cols:

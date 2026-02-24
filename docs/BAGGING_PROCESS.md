@@ -16,8 +16,8 @@ The current implementation uses processed features because the next feature-engi
 
 The script expects:
 
-- `data/processed/features.csv`
-- `data/processed/labels.csv`
+- `data/processed/features_first_n.csv`
+- `data/processed/baseline_labels.csv`
 
 The pipeline:
 

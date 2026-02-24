@@ -130,7 +130,7 @@ import pandas as pd
 
 from online_retail_prediction.modeling.clustering import SessionClusterer
 
-session_features_df = pd.read_csv("data/processed/features.csv")
+session_features_df = pd.read_csv("data/processed/features_full_session.csv")
 
 clusterer = SessionClusterer(random_state=42)
 clusterer.fit_clustering(session_features_df=session_features_df)
@@ -156,7 +156,7 @@ You can run the full clustering + export pipeline from the command line:
 
 ```bash
 uv run python -m online_retail_prediction.modeling.cluster_labeling_cli \
-  --features-path data/processed/features.csv \
+  --features-path data/processed/features_full_session.csv \
   --output-dir data/cluster_outputs \
   --representatives-top-n 5
 ```
@@ -165,7 +165,7 @@ To remove highly correlated features before clustering:
 
 ```bash
 uv run python -m online_retail_prediction.modeling.cluster_labeling_cli \
-  --features-path data/processed/features.csv \
+  --features-path data/processed/features_full_session.csv \
   --drop-correlated \
   --output-dir data/cluster_outputs
 ```
@@ -174,7 +174,7 @@ Optional low-variance filtering is also available:
 
 ```bash
 uv run python -m online_retail_prediction.modeling.cluster_labeling_cli \
-  --features-path data/processed/features.csv \
+  --features-path data/processed/features_full_session.csv \
   --drop-low-variance \
   --min-variance 1e-8 \
   --output-dir data/cluster_outputs
@@ -194,7 +194,7 @@ Run:
 
 ```bash
 uv run python -m online_retail_prediction.modeling.cluster_labeling_cli \
-  --features-path data/processed/features.csv \
+  --features-path data/processed/features_full_session.csv \
   --manual-labels-path data/cluster_outputs/cluster_labels.csv \
   --label-column intent_label \
   --output-dir data/cluster_outputs

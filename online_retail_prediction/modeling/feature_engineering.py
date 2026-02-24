@@ -3,6 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+VALID_AGGREGATION_MODES = {"first_n", "full_session"}
+
 DEFAULT_REQUIRED_COLUMNS = [
     "session_id",
     "order",
@@ -147,26 +149,42 @@ def _category_entropy(values: pd.Series) -> float:
     return float(entropy)
 
 
-def build_session_features(clickstream: pd.DataFrame, n_clicks: int = 5) -> pd.DataFrame:
+def build_session_features(
+    clickstream: pd.DataFrame,
+    n_clicks: int = 5,
+    aggregation_mode: str = "first_n",
+) -> pd.DataFrame:
     """
-    Build one feature row per session from the first n clicks only.
+    Build one feature row per session from either first-N clicks or full session clicks.
 
     Args:
         clickstream: Click-level dataframe.
         n_clicks: Number of initial clicks to use for features.
+        aggregation_mode: Aggregation strategy, one of {"first_n", "full_session"}.
 
     Returns:
         Session-level feature dataframe indexed by session_id.
     """
 
-    if n_clicks <= 0:
-        raise ValueError("n_clicks must be greater than 0")
+    mode = aggregation_mode.strip().lower()
+    if mode not in VALID_AGGREGATION_MODES:
+        raise ValueError(
+            f"Invalid aggregation_mode='{aggregation_mode}'. "
+            f"Use one of: {sorted(VALID_AGGREGATION_MODES)}."
+        )
+
+    if mode == "first_n" and n_clicks <= 0:
+        raise ValueError("n_clicks must be greater than 0 when aggregation_mode='first_n'.")
 
     prepared = _prepare_clickstream(clickstream)
-    first_n = prepared.groupby("session_id", group_keys=False).head(n_clicks).copy()
-    first_n = _enrich_clicks_sequential(first_n)
+    selected_clicks = (
+        prepared.groupby("session_id", group_keys=False).head(n_clicks).copy()
+        if mode == "first_n"
+        else prepared.copy()
+    )
+    selected_clicks = _enrich_clicks_sequential(selected_clicks)
 
-    grouped = first_n.groupby("session_id")
+    grouped = selected_clicks.groupby("session_id")
     features = grouped.agg(
         n_clicks_observed=("order", "count"),
         n_unique_pages=("page", "nunique"),
@@ -195,13 +213,15 @@ def build_session_features(clickstream: pd.DataFrame, n_clicks: int = 5) -> pd.D
     features = features.join(category_shares)
     features["top_category_share"] = category_shares.max(axis=1).fillna(0.0)
 
-    model_freq = first_n["page_2_model"].value_counts(normalize=True)
-    first_n["model_frequency"] = first_n["page_2_model"].map(model_freq).fillna(0.0)
+    model_freq = selected_clicks["page_2_model"].value_counts(normalize=True)
+    selected_clicks["model_frequency"] = (
+        selected_clicks["page_2_model"].map(model_freq).fillna(0.0)
+    )
     model_features = grouped["page_2_model"].agg(
         first_model=(lambda x: x.iloc[0]),
         last_model=(lambda x: x.iloc[-1]),
     )
-    model_frequency_stats = first_n.groupby("session_id").agg(
+    model_frequency_stats = selected_clicks.groupby("session_id").agg(
         mean_model_frequency=("model_frequency", "mean"),
         max_model_frequency=("model_frequency", "max"),
         min_model_frequency=("model_frequency", "min"),
@@ -210,11 +230,13 @@ def build_session_features(clickstream: pd.DataFrame, n_clicks: int = 5) -> pd.D
 
     last_click = grouped.tail(1).set_index("session_id")
     features["last_page"] = last_click["page"]
-    features["last_location"] = last_click["location"]
+    features["last_location"] = (
+        last_click["location"] if "location" in last_click.columns else np.nan
+    )
 
-    category_freq = first_n["main_category"].value_counts(normalize=True)
-    colour_freq = first_n["colour"].value_counts(normalize=True)
-    model_freq_full = first_n["page_2_model"].value_counts(normalize=True)
+    category_freq = selected_clicks["main_category"].value_counts(normalize=True)
+    colour_freq = selected_clicks["colour"].value_counts(normalize=True)
+    model_freq_full = selected_clicks["page_2_model"].value_counts(normalize=True)
 
     features["first_model_frequency"] = (
         model_features["first_model"].map(model_freq_full).fillna(0.0)
@@ -227,50 +249,52 @@ def build_session_features(clickstream: pd.DataFrame, n_clicks: int = 5) -> pd.D
     )
     features["last_colour_frequency"] = last_click["colour"].map(colour_freq).fillna(0.0)
 
-    transitions = first_n.groupby("session_id")["main_category"].apply(
+    transitions = selected_clicks.groupby("session_id")["main_category"].apply(
         lambda values: int(values.ne(values.shift()).sum() - 1)
     )
     features["category_transition_count"] = transitions.clip(lower=0)
 
     # --- Aggregations of sequential click-level features ---
-    seq_agg = first_n.groupby("session_id").agg(
-        category_switch_rate=("category_changed", "mean"),
-        colour_switch_rate=("colour_changed", "mean"),
-        model_switch_rate=("model_changed", "mean"),
-        mean_price_diff=("price_diff", "mean"),
-        std_price_diff=("price_diff", "std"),
-        mean_price_deviation=("price_vs_cumul_mean", "mean"),
-        category_revisit_rate=("is_category_revisit", "mean"),
-        model_revisit_rate=("is_model_revisit", "mean"),
-        colour_revisit_rate=("is_colour_revisit", "mean"),
-    )
-    seq_agg["std_price_diff"] = seq_agg["std_price_diff"].fillna(0.0)
+    # Only include for first_n aggregation mode
+    if mode == "first_n":
+        seq_agg = selected_clicks.groupby("session_id").agg(
+            category_switch_rate=("category_changed", "mean"),
+            colour_switch_rate=("colour_changed", "mean"),
+            model_switch_rate=("model_changed", "mean"),
+            mean_price_diff=("price_diff", "mean"),
+            std_price_diff=("price_diff", "std"),
+            mean_price_deviation=("price_vs_cumul_mean", "mean"),
+            category_revisit_rate=("is_category_revisit", "mean"),
+            model_revisit_rate=("is_model_revisit", "mean"),
+            colour_revisit_rate=("is_colour_revisit", "mean"),
+        )
+        seq_agg["std_price_diff"] = seq_agg["std_price_diff"].fillna(0.0)
 
-    # max absolute price change across clicks
-    seq_agg["max_abs_price_diff"] = (
-        first_n.assign(abs_price_diff=lambda d: d["price_diff"].abs())
-        .groupby("session_id")["abs_price_diff"]
-        .max()
-    )
+        # max absolute price change across clicks
+        seq_agg["max_abs_price_diff"] = (
+            selected_clicks.assign(abs_price_diff=lambda d: d["price_diff"].abs())
+            .groupby("session_id")["abs_price_diff"]
+            .max()
+        )
 
-    # counts of price direction
-    seq_agg["n_price_increases"] = first_n.groupby("session_id")["price_direction"].apply(
-        lambda s: (s > 0).sum()
-    )
-    seq_agg["n_price_decreases"] = first_n.groupby("session_id")["price_direction"].apply(
-        lambda s: (s < 0).sum()
-    )
+        # counts of price direction
+        seq_agg["n_price_increases"] = selected_clicks.groupby("session_id")[
+            "price_direction"
+        ].apply(lambda s: (s > 0).sum())
+        seq_agg["n_price_decreases"] = selected_clicks.groupby("session_id")[
+            "price_direction"
+        ].apply(lambda s: (s < 0).sum())
 
-    # Exploration velocity: how early diversity was discovered.
-    # mean(cumul_unique) / max(cumul_unique) — closer to 1 means early discovery.
-    for col, name in [
-        ("cumul_unique_categories", "exploration_velocity_categories"),
-        ("cumul_unique_models", "exploration_velocity_models"),
-    ]:
-        col_max = first_n.groupby("session_id")[col].max()
-        col_mean = first_n.groupby("session_id")[col].mean()
-        seq_agg[name] = np.where(col_max > 0, col_mean / col_max, 0.0)
+        # Exploration velocity: how early diversity was discovered.
+        # mean(cumul_unique) / max(cumul_unique) — closer to 1 means early discovery.
+        for col, name in [
+            ("cumul_unique_categories", "exploration_velocity_categories"),
+            ("cumul_unique_models", "exploration_velocity_models"),
+        ]:
+            col_max = selected_clicks.groupby("session_id")[col].max()
+            col_mean = selected_clicks.groupby("session_id")[col].mean()
+            seq_agg[name] = np.where(col_max > 0, col_mean / col_max, 0.0)
 
-    features = features.join(seq_agg)
+        features = features.join(seq_agg)
 
     return features.reset_index()
