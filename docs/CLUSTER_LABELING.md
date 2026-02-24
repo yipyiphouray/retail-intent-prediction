@@ -108,8 +108,7 @@ It propagates labels to all sessions in each cluster and returns:
 1. `cluster_assignments.csv`
 2. `cluster_summary.csv`
 3. `cluster_representatives.csv`
-4. `labeled_sessions.csv`
-5. `labeled_sessions_for_rnn.csv` (only `session_id`, `intent_label`)
+4. `labeled_sessions.csv` (available for downstream tasks)
 
 ### Model/metrics outputs (`models/`)
 1. `clustering_metrics.json`
@@ -202,7 +201,7 @@ uv run python -m online_retail_prediction.modeling.cluster_labeling_cli \
 
 ## RNN handoff
 Primary handoff file for sequence model integration:
-- `data/cluster_outputs/labeled_sessions_for_rnn.csv`
+- `data/cluster_outputs/labeled_sessions.csv`
 
 Schema:
 - `session_id`
