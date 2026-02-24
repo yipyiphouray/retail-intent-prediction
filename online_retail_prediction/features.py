@@ -19,8 +19,9 @@ app = typer.Typer()
 @app.command()
 def main(
     input_path: Path = PROCESSED_DATA_DIR / "e-shop clothing 2008.csv",
-    features_output_path: Path = PROCESSED_DATA_DIR / "features.csv",
-    labels_output_path: Path = PROCESSED_DATA_DIR / "labels.csv",
+    first_n_features_output_path: Path = PROCESSED_DATA_DIR / "features_first_n.csv",
+    full_session_features_output_path: Path = PROCESSED_DATA_DIR / "features_full_session.csv",
+    labels_output_path: Path = PROCESSED_DATA_DIR / "baseline_labels.csv",
     delimiter: str = ",",
     n_clicks: int = 5,
     label_mode: str = "proxy_hybrid",
@@ -32,7 +33,7 @@ def main(
     external_label_column: str = "label",
     external_confidence_column: str | None = None,
 ):
-    """Create first-N click session features and session-level labels."""
+    """Create first-N and full-session session features, and session-level labels."""
 
     logger.info(f"Loading clickstream from {input_path}...")
     clickstream = pd.read_csv(input_path, sep=delimiter)
@@ -101,19 +102,30 @@ def main(
             "proxy_hybrid, manual_only, cluster_only, manual_over_proxy, cluster_over_proxy."
         )
 
-    features_df = build_session_features(clickstream=clickstream, n_clicks=n_clicks)
+    features_first_n_df = build_session_features(
+        clickstream=clickstream,
+        n_clicks=n_clicks,
+        aggregation_mode="first_n",
+    )
+    features_full_session_df = build_session_features(
+        clickstream=clickstream,
+        aggregation_mode="full_session",
+    )
     labels_df = generate_session_labels(
         clickstream=clickstream,
         label_strategy=label_strategy,
-        session_ids=features_df["session_id"],
+        session_ids=features_first_n_df["session_id"],
     )
 
-    features_output_path.parent.mkdir(parents=True, exist_ok=True)
+    first_n_features_output_path.parent.mkdir(parents=True, exist_ok=True)
+    full_session_features_output_path.parent.mkdir(parents=True, exist_ok=True)
     labels_output_path.parent.mkdir(parents=True, exist_ok=True)
-    features_df.to_csv(features_output_path, index=False)
+    features_first_n_df.to_csv(first_n_features_output_path, index=False)
+    features_full_session_df.to_csv(full_session_features_output_path, index=False)
     labels_df.to_csv(labels_output_path, index=False)
 
-    logger.success(f"Features saved to {features_output_path}")
+    logger.success(f"First-N features saved to {first_n_features_output_path}")
+    logger.success(f"Full-session features saved to {full_session_features_output_path}")
     logger.success(f"Labels saved to {labels_output_path}")
 
 

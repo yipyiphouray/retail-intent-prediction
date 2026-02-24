@@ -288,8 +288,8 @@ def save_results(
 
 @app.command()
 def main(
-    features_path: Path = PROCESSED_DATA_DIR / "features.csv",
-    labels_path: Path = PROCESSED_DATA_DIR / "labels.csv",
+    features_path: Path = PROCESSED_DATA_DIR / "features_first_n.csv",
+    labels_path: Path = PROCESSED_DATA_DIR / "baseline_labels.csv",
     output_dir: Path = MODELS_DIR,
     test_size: float = 0.2,
     cv: int = 5,

@@ -12,7 +12,7 @@ from online_retail_prediction.modeling.cluster_labeling_service import (
     save_cluster_labels,
 )
 
-FEATURES_PATH = PROCESSED_DATA_DIR / "features.csv"
+FEATURES_PATH = PROCESSED_DATA_DIR / "features_full_session.csv"
 OUTPUT_DIR = DATA_DIR / "cluster_outputs"
 LABEL_OUTPUT_PATH = OUTPUT_DIR / "cluster_label.csv"
 SUMMARY_STATE_KEY = "cluster_summary_df"

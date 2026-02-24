@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from joblib import load
 from loguru import logger
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,7 +16,7 @@ from sklearn.metrics import (
 from sklearn.model_selection import learning_curve, train_test_split, validation_curve
 import typer
 
-from online_retail_prediction.config import MODELS_DIR, PROCESSED_DATA_DIR, REPORTS_DIR
+from online_retail_prediction.config import PROCESSED_DATA_DIR, REPORTS_DIR
 
 app = typer.Typer()
 
@@ -51,7 +50,9 @@ def plot_learning_curve(
         train_sizes = np.linspace(0.1, 1.0, 10)
 
     train_sizes_abs, train_scores, val_scores = learning_curve(
-        model, X, y,
+        model,
+        X,
+        y,
         train_sizes=train_sizes,
         cv=cv,
         scoring=scoring,
@@ -66,10 +67,12 @@ def plot_learning_curve(
 
     fig, ax = plt.subplots(figsize=figsize)
 
-    ax.fill_between(train_sizes_abs, train_mean - train_std, train_mean + train_std,
-                    alpha=0.2, color="blue")
-    ax.fill_between(train_sizes_abs, val_mean - val_std, val_mean + val_std,
-                    alpha=0.2, color="orange")
+    ax.fill_between(
+        train_sizes_abs, train_mean - train_std, train_mean + train_std, alpha=0.2, color="blue"
+    )
+    ax.fill_between(
+        train_sizes_abs, val_mean - val_std, val_mean + val_std, alpha=0.2, color="orange"
+    )
 
     ax.plot(train_sizes_abs, train_mean, "o-", color="blue", label="Training Score")
     ax.plot(train_sizes_abs, val_mean, "o-", color="orange", label="Validation Score")
@@ -123,7 +126,9 @@ def plot_validation_curve(
         matplotlib Figure object.
     """
     train_scores, val_scores = validation_curve(
-        model, X, y,
+        model,
+        X,
+        y,
         param_name=param_name,
         param_range=param_range,
         cv=cv,
@@ -138,10 +143,10 @@ def plot_validation_curve(
 
     fig, ax = plt.subplots(figsize=figsize)
 
-    ax.fill_between(param_range, train_mean - train_std, train_mean + train_std,
-                    alpha=0.2, color="blue")
-    ax.fill_between(param_range, val_mean - val_std, val_mean + val_std,
-                    alpha=0.2, color="orange")
+    ax.fill_between(
+        param_range, train_mean - train_std, train_mean + train_std, alpha=0.2, color="blue"
+    )
+    ax.fill_between(param_range, val_mean - val_std, val_mean + val_std, alpha=0.2, color="orange")
 
     ax.plot(param_range, train_mean, "o-", color="blue", label="Training Score")
     ax.plot(param_range, val_mean, "o-", color="orange", label="Validation Score")
@@ -199,8 +204,16 @@ def plot_confusion_matrix(
     fig, ax = plt.subplots(figsize=figsize)
 
     fmt = ".2f" if normalize else "d"
-    sns.heatmap(cm, annot=True, fmt=fmt, cmap="Blues", xticklabels=labels,
-                yticklabels=labels, ax=ax, cbar_kws={"shrink": 0.8})
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt=fmt,
+        cmap="Blues",
+        xticklabels=labels,
+        yticklabels=labels,
+        ax=ax,
+        cbar_kws={"shrink": 0.8},
+    )
 
     ax.set_xlabel("Predicted", fontsize=12)
     ax.set_ylabel("Actual", fontsize=12)
@@ -359,8 +372,8 @@ def plot_calibration_curve(
 
 @app.command()
 def main(
-    features_path: Path = PROCESSED_DATA_DIR / "features.csv",
-    labels_path: Path = PROCESSED_DATA_DIR / "labels.csv",
+    features_path: Path = PROCESSED_DATA_DIR / "features_first_n.csv",
+    labels_path: Path = PROCESSED_DATA_DIR / "baseline_labels.csv",
     output_dir: Path = REPORTS_DIR / "figures",
     cv: int = 5,
     scoring: str = "accuracy",

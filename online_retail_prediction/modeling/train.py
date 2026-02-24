@@ -1,9 +1,9 @@
 from pathlib import Path
 
 import joblib
+from loguru import logger
 import numpy as np
 import pandas as pd
-from loguru import logger
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
@@ -50,9 +50,7 @@ def load_and_prepare_data(
     labels = generate_session_labels(
         clickstream, label_strategy=strategy, session_ids=features["session_id"]
     )
-    logger.info(
-        f"Label distribution: {labels['label'].value_counts().to_dict()}"
-    )
+    logger.info(f"Label distribution: {labels['label'].value_counts().to_dict()}")
 
     return features, labels
 
@@ -75,7 +73,7 @@ def prepare_train_test_split(
     X = X[numeric_cols]
 
     logger.info(f"Using {len(feature_cols)} features: {list(X.columns)}")
-    logger.info(f"Class distribution: 0={sum(y==0)}, 1={sum(y==1)}")
+    logger.info(f"Class distribution: 0={sum(y == 0)}, 1={sum(y == 1)}")
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state, stratify=y
@@ -239,8 +237,8 @@ def main(
 
     if save_features:
         PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        features_path = PROCESSED_DATA_DIR / "features.csv"
-        labels_path = PROCESSED_DATA_DIR / "labels.csv"
+        features_path = PROCESSED_DATA_DIR / "features_first_n.csv"
+        labels_path = PROCESSED_DATA_DIR / "baseline_labels.csv"
         features.to_csv(features_path, index=False)
         labels.to_csv(labels_path, index=False)
         logger.info(f"Saved features to {features_path}")
@@ -253,14 +251,17 @@ def main(
     best_params = None
     if tune:
         model, best_params, cv_results = train_tuned_model(
-            X_train, y_train,
+            X_train,
+            y_train,
             model_type=model_type,
             scoring=scoring,
             cv=cv,
             random_state=random_state,
         )
     else:
-        model = train_baseline_model(X_train, y_train, model_type=model_type, random_state=random_state)
+        model = train_baseline_model(
+            X_train, y_train, model_type=model_type, random_state=random_state
+        )
 
     train_metrics = evaluate_model(model, X_train, y_train, split_name="train")
     test_metrics = evaluate_model(model, X_test, y_test, split_name="test")
@@ -270,7 +271,9 @@ def main(
         train_val = train_metrics[metric_name]
         test_val = test_metrics[metric_name]
         diff = train_val - test_val
-        logger.info(f"{metric_name.upper()}: Train={train_val:.4f}, Test={test_val:.4f}, Diff={diff:+.4f}")
+        logger.info(
+            f"{metric_name.upper()}: Train={train_val:.4f}, Test={test_val:.4f}, Diff={diff:+.4f}"
+        )
 
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, model_path)

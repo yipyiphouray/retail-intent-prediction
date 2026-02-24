@@ -16,7 +16,7 @@ def run_clustering_and_load_summary(
     output_dir: Path,
     random_state: int = 42,
 ) -> pd.DataFrame:
-    """Run clustering from features.csv, export artifacts, and load cluster_summary.csv."""
+    """Run clustering from a session-features CSV, export artifacts, and load summary."""
     if not features_path.exists():
         raise FileNotFoundError(f"Session features file not found: {features_path}")
 

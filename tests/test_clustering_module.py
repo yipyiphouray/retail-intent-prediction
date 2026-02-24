@@ -113,7 +113,6 @@ def test_export_outputs_writes_data_and_models_metrics(
     assert exports["cluster_summary"].exists()
     assert exports["cluster_representatives"].exists()
     assert exports["labeled_sessions"].exists()
-    assert exports["labeled_sessions_for_rnn"].exists()
 
     assert exports["clustering_metrics"].exists()
     assert exports["clustering_metrics"].name == "clustering_metrics.json"

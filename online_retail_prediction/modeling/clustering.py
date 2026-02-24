@@ -56,8 +56,8 @@ class SessionClusterer:
     ) -> tuple[pd.DataFrame, list[str]]:
         if X.empty:
             return X, []
-
-        corr = X.corr(numeric_only=True).abs()
+        scaled = StandardScaler().fit_transform(X)
+        corr = pd.DataFrame(scaled, columns=X.columns, index=X.index).corr(numeric_only=True).abs()
         upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
         drop_cols = [col for col in upper.columns if (upper[col] > threshold).any()]
         if not drop_cols:
@@ -347,7 +347,6 @@ class SessionClusterer:
         summary_path = output_dir / "cluster_summary.csv"
         representatives_path = output_dir / "cluster_representatives.csv"
         labeled_path = output_dir / "labeled_sessions.csv"
-        labeled_for_rnn_path = output_dir / "labeled_sessions_for_rnn.csv"
 
         metrics_path = MODELS_DIR / "clustering_metrics.json"
         scaler_path = MODELS_DIR / "clustering_scaler.joblib"
@@ -361,9 +360,6 @@ class SessionClusterer:
             self.cluster_representatives_df.to_csv(representatives_path, index=False)
         if self.labeled_sessions_df is not None:
             self.labeled_sessions_df.to_csv(labeled_path, index=False)
-            self.labeled_sessions_df[["session_id", "intent_label"]].to_csv(
-                labeled_for_rnn_path, index=False
-            )
 
         with metrics_path.open("w", encoding="utf-8") as handle:
             json.dump(self.metrics, handle, indent=2)
@@ -382,7 +378,6 @@ class SessionClusterer:
             "cluster_summary": summary_path,
             "cluster_representatives": representatives_path,
             "labeled_sessions": labeled_path,
-            "labeled_sessions_for_rnn": labeled_for_rnn_path,
             "clustering_metrics": metrics_path,
             "scaler": scaler_path,
             "pca": pca_path,

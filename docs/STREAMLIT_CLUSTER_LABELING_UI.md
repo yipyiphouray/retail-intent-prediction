@@ -18,9 +18,9 @@ The app runs clustering on startup, displays cluster summary features, and saves
 make sync
 ```
 
-2. Ensure `features.csv` exists at:
+2. Ensure full-session features exist at:
 
-- `data/processed/features.csv`
+- `data/processed/features_full_session.csv`
 
 If it does not exist, generate it with:
 
@@ -80,7 +80,7 @@ Use **Refresh clustering** to rerun clustering and rebuild the displayed cluster
 ## Troubleshooting
 
 - `Session features file not found`
-  - Create `data/processed/features.csv` first (see Prerequisites).
+  - Create `data/processed/features_full_session.csv` first (see Prerequisites).
 
 - Port already in use (`8501`)
   - Stop existing Streamlit process or run on another port:
