@@ -74,7 +74,7 @@ make clean     # remove Python cache artifacts
 ## Bagging Model Training
 
 Train and fine-tune bagging classifiers (base estimators: logistic regression, decision tree, and KNN)
-using processed features/labels:
+using processed features and cluster-derived intent labels:
 
 ```bash
 uv run python -m online_retail_prediction.modeling.bagging_train
@@ -85,7 +85,8 @@ Optional arguments:
 ```bash
 uv run python -m online_retail_prediction.modeling.bagging_train \
     --features-path data/processed/features_first_n.csv \
-    --labels-path data/processed/baseline_labels.csv \
+  --cluster-assignments-path data/cluster_outputs/cluster_assignments.csv \
+  --cluster-labels-path data/cluster_outputs/cluster_label.csv \
     --output-dir models \
     --test-size 0.2 \
     --cv 5 \

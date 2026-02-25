@@ -1,13 +1,14 @@
-"""Tests for bagging model training with processed features and labels."""
+"""Tests for bagging model training with cluster-derived labels."""
 
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from online_retail_prediction.modeling import bagging_train
 
 
-def _write_sample_features_labels(tmp_path: Path) -> tuple[Path, Path]:
+def _write_sample_features_cluster_labels(tmp_path: Path) -> tuple[Path, Path, Path]:
     features = pd.DataFrame(
         {
             "session_id": list(range(1, 13)),
@@ -56,25 +57,40 @@ def _write_sample_features_labels(tmp_path: Path) -> tuple[Path, Path]:
         }
     )
 
-    labels = pd.DataFrame(
+    cluster_assignments = pd.DataFrame(
         {
             "session_id": list(range(1, 13)),
-            "label": [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+            "cluster_id": [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+        }
+    )
+
+    cluster_labels = pd.DataFrame(
+        {
+            "cluster_id": [0, 1],
+            "intent_label": ["low-intent", "high-intent"],
         }
     )
 
     features_path = tmp_path / "features.csv"
-    labels_path = tmp_path / "labels.csv"
+    cluster_assignments_path = tmp_path / "cluster_assignments.csv"
+    cluster_labels_path = tmp_path / "cluster_label.csv"
     features.to_csv(features_path, index=False)
-    labels.to_csv(labels_path, index=False)
+    cluster_assignments.to_csv(cluster_assignments_path, index=False)
+    cluster_labels.to_csv(cluster_labels_path, index=False)
 
-    return features_path, labels_path
+    return features_path, cluster_assignments_path, cluster_labels_path
 
 
 def test_load_processed_features_and_labels_success(tmp_path: Path):
-    features_path, labels_path = _write_sample_features_labels(tmp_path)
+    features_path, cluster_assignments_path, cluster_labels_path = (
+        _write_sample_features_cluster_labels(tmp_path)
+    )
 
-    X, y = bagging_train.load_processed_features_and_labels(features_path, labels_path)
+    X, y = bagging_train.load_processed_features_and_labels(
+        features_path=features_path,
+        cluster_assignments_path=cluster_assignments_path,
+        cluster_labels_path=cluster_labels_path,
+    )
 
     assert not X.empty
     assert len(X) == len(y) == 12
@@ -83,8 +99,14 @@ def test_load_processed_features_and_labels_success(tmp_path: Path):
 
 
 def test_split_data_preserves_total_rows(tmp_path: Path):
-    features_path, labels_path = _write_sample_features_labels(tmp_path)
-    X, y = bagging_train.load_processed_features_and_labels(features_path, labels_path)
+    features_path, cluster_assignments_path, cluster_labels_path = (
+        _write_sample_features_cluster_labels(tmp_path)
+    )
+    X, y = bagging_train.load_processed_features_and_labels(
+        features_path=features_path,
+        cluster_assignments_path=cluster_assignments_path,
+        cluster_labels_path=cluster_labels_path,
+    )
 
     X_train, X_test, y_train, y_test = bagging_train.split_data(
         X,
@@ -97,9 +119,31 @@ def test_split_data_preserves_total_rows(tmp_path: Path):
     assert len(y_train) + len(y_test) == len(y)
 
 
+def test_load_processed_features_and_labels_raises_for_invalid_intent_label(tmp_path: Path):
+    features_path, cluster_assignments_path, cluster_labels_path = (
+        _write_sample_features_cluster_labels(tmp_path)
+    )
+    cluster_labels = pd.read_csv(cluster_labels_path)
+    cluster_labels.loc[cluster_labels["cluster_id"] == 1, "intent_label"] = "medium-intent"
+    cluster_labels.to_csv(cluster_labels_path, index=False)
+
+    with pytest.raises(ValueError, match="Unsupported intent labels"):
+        bagging_train.load_processed_features_and_labels(
+            features_path=features_path,
+            cluster_assignments_path=cluster_assignments_path,
+            cluster_labels_path=cluster_labels_path,
+        )
+
+
 def test_evaluate_model_returns_required_metrics(tmp_path: Path):
-    features_path, labels_path = _write_sample_features_labels(tmp_path)
-    X, y = bagging_train.load_processed_features_and_labels(features_path, labels_path)
+    features_path, cluster_assignments_path, cluster_labels_path = (
+        _write_sample_features_cluster_labels(tmp_path)
+    )
+    X, y = bagging_train.load_processed_features_and_labels(
+        features_path=features_path,
+        cluster_assignments_path=cluster_assignments_path,
+        cluster_labels_path=cluster_labels_path,
+    )
     X_train, X_test, y_train, y_test = bagging_train.split_data(
         X, y, test_size=0.25, random_state=42
     )
@@ -139,7 +183,9 @@ def test_evaluate_model_returns_required_metrics(tmp_path: Path):
 
 
 def test_main_creates_model_artifacts(tmp_path: Path, monkeypatch):
-    features_path, labels_path = _write_sample_features_labels(tmp_path)
+    features_path, cluster_assignments_path, cluster_labels_path = (
+        _write_sample_features_cluster_labels(tmp_path)
+    )
     output_dir = tmp_path / "models"
     original_build_model_configs = bagging_train.build_model_configs
 
@@ -186,7 +232,8 @@ def test_main_creates_model_artifacts(tmp_path: Path, monkeypatch):
 
     bagging_train.main(
         features_path=features_path,
-        labels_path=labels_path,
+        cluster_assignments_path=cluster_assignments_path,
+        cluster_labels_path=cluster_labels_path,
         output_dir=output_dir,
         test_size=0.25,
         cv=2,
