@@ -10,23 +10,25 @@ The bagging trainer builds and compares three bagging ensembles for purchase-int
 - Bagging + Decision Tree
 - Bagging + KNN
 
-The current implementation uses processed features because the next feature-engineering iteration is still in progress.
+The current implementation uses processed features and cluster-derived intent labels.
 
 ## Data Inputs
 
 The script expects:
 
 - `data/processed/features_first_n.csv`
-- `data/processed/baseline_labels.csv`
+- `data/cluster_outputs/cluster_assignments.csv`
+- `data/cluster_outputs/cluster_label.csv`
 
 The pipeline:
 
-1. Loads both files.
-2. Merges on `session_id`.
-3. Drops rows where `label` is missing.
-4. Uses numeric feature columns only.
-5. Casts labels to integer class values.
-6. Splits data into train/test with stratification.
+1. Loads processed features, cluster assignments, and cluster label mapping.
+2. Merges `cluster_assignments.csv` with `cluster_label.csv` on `cluster_id`.
+3. Maps cluster intent labels to binary target labels (`low-intent=0`, `high-intent=1`).
+4. Drops `cluster_id` and keeps session-level (`session_id`, `label`) targets.
+5. Merges derived labels into features on `session_id`.
+6. Uses numeric feature columns only.
+7. Splits data into train/test with stratification.
 
 ## Modeling Flow
 
@@ -102,4 +104,5 @@ The comparison file ranks models by test ROC-AUC.
 uv run python -m online_retail_prediction.modeling.bagging_train
 ```
 
-Optional arguments include custom features path, labels path, output directory, test-size, CV folds, and random seed.
+Optional arguments include custom features path, cluster-assignments path, cluster-labels path,
+output directory, test-size, CV folds, and random seed.

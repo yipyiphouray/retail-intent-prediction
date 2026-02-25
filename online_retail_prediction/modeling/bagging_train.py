@@ -22,7 +22,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 import typer
 
-from online_retail_prediction.config import MODELS_DIR, PROCESSED_DATA_DIR
+from online_retail_prediction.config import MODELS_DIR, PROJ_ROOT, PROCESSED_DATA_DIR
 
 app = typer.Typer()
 
@@ -51,31 +51,131 @@ def _create_bagging_classifier(
         return BaggingClassifier(base_estimator=base_estimator, **params)
 
 
+def _normalize_intent_labels(raw_labels: pd.Series) -> pd.Series:
+    """Normalize cluster intent labels to binary integers (low-intent=0, high-intent=1)."""
+    if pd.api.types.is_numeric_dtype(raw_labels):
+        normalized = raw_labels.astype(int)
+    else:
+        normalized = (
+            raw_labels.astype(str)
+            .str.strip()
+            .str.lower()
+            .map(
+                {
+                    "low-intent": 0,
+                    "low_intent": 0,
+                    "low intent": 0,
+                    "0": 0,
+                    "high-intent": 1,
+                    "high_intent": 1,
+                    "high intent": 1,
+                    "1": 1,
+                }
+            )
+        )
+
+    if normalized.isna().any():
+        invalid_values = sorted(raw_labels[normalized.isna()].astype(str).unique().tolist())
+        raise ValueError(f"Unsupported intent labels found in cluster labels: {invalid_values}")
+
+    unique_values = set(normalized.unique().tolist())
+    if not unique_values.issubset({0, 1}):
+        raise ValueError(
+            f"Cluster intent labels must map to binary values 0/1. Found: {sorted(unique_values)}"
+        )
+
+    return normalized.astype(int)
+
+
+def _build_session_labels_from_cluster_files(
+    cluster_assignments: pd.DataFrame,
+    cluster_labels: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build session-level binary labels from cluster assignments and cluster label map."""
+    required_assignment_columns = {"session_id", "cluster_id"}
+    required_cluster_label_columns = {"cluster_id", "intent_label"}
+
+    if not required_assignment_columns.issubset(cluster_assignments.columns):
+        missing = required_assignment_columns - set(cluster_assignments.columns)
+        raise ValueError(f"Missing required cluster assignment columns: {sorted(missing)}")
+
+    if not required_cluster_label_columns.issubset(cluster_labels.columns):
+        missing = required_cluster_label_columns - set(cluster_labels.columns)
+        raise ValueError(f"Missing required cluster label columns: {sorted(missing)}")
+
+    labeled_assignments = cluster_assignments.merge(
+        cluster_labels[["cluster_id", "intent_label"]],
+        on="cluster_id",
+        how="inner",
+    )
+
+    if labeled_assignments.empty:
+        raise ValueError("Cluster assignments and cluster labels produced an empty merge.")
+
+    labeled_assignments["label"] = _normalize_intent_labels(labeled_assignments["intent_label"])
+
+    session_label_conflicts = labeled_assignments.groupby("session_id")["label"].nunique()
+    conflicting_sessions = session_label_conflicts[session_label_conflicts > 1]
+    if not conflicting_sessions.empty:
+        sample_conflicts = conflicting_sessions.index.tolist()[:10]
+        raise ValueError(
+            "Found session_id values with conflicting cluster-derived labels. "
+            f"Sample session_ids: {sample_conflicts}"
+        )
+
+    return labeled_assignments[["session_id", "label"]].drop_duplicates(
+        subset=["session_id"], keep="first"
+    )
+
+
 def load_processed_features_and_labels(
     features_path: Path,
-    labels_path: Path,
+    labels_path: Path | None = None,
+    cluster_assignments_path: Path | None = None,
+    cluster_labels_path: Path | None = None,
 ) -> tuple[pd.DataFrame, pd.Series]:
-    """Load and merge processed features and labels."""
+    """Load processed features and labels (direct labels file or cluster-derived labels)."""
     if not features_path.exists():
         raise FileNotFoundError(f"Features file not found: {features_path}")
-    if not labels_path.exists():
-        raise FileNotFoundError(f"Labels file not found: {labels_path}")
 
     features = pd.read_csv(features_path)
-    labels = pd.read_csv(labels_path)
 
     required_feature_columns = {"session_id"}
-    required_label_columns = {"session_id", "label"}
 
     if not required_feature_columns.issubset(features.columns):
         missing = required_feature_columns - set(features.columns)
         raise ValueError(f"Missing required feature columns: {sorted(missing)}")
 
-    if not required_label_columns.issubset(labels.columns):
-        missing = required_label_columns - set(labels.columns)
-        raise ValueError(f"Missing required label columns: {sorted(missing)}")
+    if labels_path is not None:
+        if not labels_path.exists():
+            raise FileNotFoundError(f"Labels file not found: {labels_path}")
+        labels = pd.read_csv(labels_path)
+        required_label_columns = {"session_id", "label"}
+        if not required_label_columns.issubset(labels.columns):
+            missing = required_label_columns - set(labels.columns)
+            raise ValueError(f"Missing required label columns: {sorted(missing)}")
+        session_labels = labels[["session_id", "label"]].copy()
+    else:
+        if cluster_assignments_path is None or cluster_labels_path is None:
+            raise ValueError(
+                "Provide either labels_path or both cluster_assignments_path and "
+                "cluster_labels_path."
+            )
+        if not cluster_assignments_path.exists():
+            raise FileNotFoundError(
+                f"Cluster assignments file not found: {cluster_assignments_path}"
+            )
+        if not cluster_labels_path.exists():
+            raise FileNotFoundError(f"Cluster labels file not found: {cluster_labels_path}")
 
-    dataset = features.merge(labels[["session_id", "label"]], on="session_id", how="inner")
+        cluster_assignments = pd.read_csv(cluster_assignments_path)
+        cluster_labels = pd.read_csv(cluster_labels_path)
+        session_labels = _build_session_labels_from_cluster_files(
+            cluster_assignments=cluster_assignments,
+            cluster_labels=cluster_labels,
+        )
+
+    dataset = features.merge(session_labels, on="session_id", how="inner")
     dataset = dataset.dropna(subset=["label"])
 
     if dataset.empty:
@@ -151,34 +251,34 @@ def build_model_configs(
         "logistic_regression": (
             logistic_pipeline,
             {
-                "n_estimators": [25, 50, 100],
-                "max_samples": [0.6, 0.8, 1.0],
-                "max_features": [0.7, 1.0],
+                "n_estimators": [100, 150],
+                "max_samples": [0.8, 1.0],
+                "max_features": [1.0],
                 "bootstrap": [True],
-                "estimator__classifier__C": [0.1, 1.0, 10.0],
+                "estimator__classifier__C": [0.5, 1.0, 2.0, 5.0],
             },
         ),
         "decision_tree": (
             decision_tree,
             {
-                "n_estimators": [25, 50, 100],
-                "max_samples": [0.6, 0.8, 1.0],
-                "max_features": [0.7, 1.0],
-                "bootstrap": [True, False],
-                "estimator__max_depth": [5, 10, None],
-                "estimator__min_samples_split": [2, 5, 10],
-                "estimator__min_samples_leaf": [1, 2, 4],
+                "n_estimators": [100, 150, 200],
+                "max_samples": [0.6, 0.7, 0.8],
+                "max_features": [0.7, 0.8, 0.9],
+                "bootstrap": [False],
+                "estimator__max_depth": [8, 10, 12, None],
+                "estimator__min_samples_split": [2, 4, 6],
+                "estimator__min_samples_leaf": [2, 4, 6],
             },
         ),
         "knn": (
             knn_pipeline,
             {
                 # Reduced grid to limit total CV fits for KNN (faster tuning)
-                "n_estimators": [25, 50],
-                "max_samples": [0.6, 1.0],
-                "max_features": [0.7, 1.0],
+                "n_estimators": [50, 75],
+                "max_samples": [0.6, 0.8],
+                "max_features": [0.6, 0.8],
                 "bootstrap": [True],
-                "estimator__classifier__n_neighbors": [3, 5],
+                "estimator__classifier__n_neighbors": [5, 7],
                 "estimator__classifier__weights": ["uniform"],
                 "estimator__classifier__p": [2],
             },
@@ -289,17 +389,22 @@ def save_results(
 @app.command()
 def main(
     features_path: Path = PROCESSED_DATA_DIR / "features_first_n.csv",
-    labels_path: Path = PROCESSED_DATA_DIR / "baseline_labels.csv",
+    cluster_assignments_path: Path = PROJ_ROOT / "data" / "cluster_outputs" / "cluster_assignments.csv",
+    cluster_labels_path: Path = PROJ_ROOT / "data" / "cluster_outputs" / "cluster_label.csv",
     output_dir: Path = MODELS_DIR,
     test_size: float = 0.2,
     cv: int = 5,
     random_state: int = 42,
 ):
-    """Train, tune, and evaluate bagging models with LR, DT, and KNN base estimators."""
+    """Train, tune, and evaluate bagging models using cluster-derived intent labels."""
     logger.info("BAGGING TRAINING PIPELINE")
     logger.info("Fine-tuning objective: roc_auc")
 
-    X, y = load_processed_features_and_labels(features_path=features_path, labels_path=labels_path)
+    X, y = load_processed_features_and_labels(
+        features_path=features_path,
+        cluster_assignments_path=cluster_assignments_path,
+        cluster_labels_path=cluster_labels_path,
+    )
     X_train, X_test, y_train, y_test = split_data(
         X,
         y,
