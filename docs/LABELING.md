@@ -65,7 +65,7 @@ This supports your intended training setup:
 
 Outputs are saved to:
 
-- `data/processed/labels.csv`
+- `data/processed/baseline_labels.csv`
 
 ## External Label File Requirements
 By default, external label files should contain:

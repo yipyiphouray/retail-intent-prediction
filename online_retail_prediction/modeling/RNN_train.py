@@ -10,16 +10,13 @@ from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.model_selection import train_test_split
 import typer
 
-from online_retail_prediction.config import MODELS_DIR, RAW_DATA_DIR
+from online_retail_prediction.config import MODELS_DIR, PROJ_ROOT, RAW_DATA_DIR
 from online_retail_prediction.modeling.clicks_feature_engineering import (
 	build_click_level_features,
 )
-from online_retail_prediction.modeling.labeling import (
-	ProxyHybridIntentLabelStrategy,
-	generate_session_labels,
-)
 
 app = typer.Typer()
+CLUSTER_OUTPUTS_DIR = PROJ_ROOT / "data" / "cluster_outputs"
 
 
 def _sigmoid(values: np.ndarray) -> np.ndarray:
@@ -154,6 +151,91 @@ def _extract_numeric_sequence_columns(click_features: pd.DataFrame) -> list[str]
 	return [column for column in numeric_columns if column not in excluded_columns]
 
 
+def _normalize_intent_labels(raw_labels: pd.Series) -> pd.Series:
+	if pd.api.types.is_numeric_dtype(raw_labels):
+		normalized = raw_labels.astype(int)
+	else:
+		normalized = (
+			raw_labels.astype(str)
+			.str.strip()
+			.str.lower()
+			.map(
+				{
+					"low-intent": 0,
+					"low_intent": 0,
+					"low intent": 0,
+					"0": 0,
+					"high-intent": 1,
+					"high_intent": 1,
+					"high intent": 1,
+					"1": 1,
+				}
+			)
+		)
+
+	if normalized.isna().any():
+		invalid_values = sorted(raw_labels[normalized.isna()].astype(str).unique().tolist())
+		raise ValueError(f"Unsupported intent labels found in cluster labels: {invalid_values}")
+
+	unique_values = set(normalized.unique().tolist())
+	if not unique_values.issubset({0, 1}):
+		raise ValueError(
+			f"Cluster intent labels must map to binary values 0/1. Found: {sorted(unique_values)}"
+		)
+
+	return normalized.astype(int)
+
+
+def _load_session_labels_from_cluster_files(
+	cluster_assignments_path: Path,
+	cluster_labels_path: Path,
+) -> pd.DataFrame:
+	if not cluster_assignments_path.exists():
+		raise FileNotFoundError(f"Cluster assignments file not found: {cluster_assignments_path}")
+	if not cluster_labels_path.exists():
+		raise FileNotFoundError(f"Cluster labels file not found: {cluster_labels_path}")
+
+	cluster_assignments = pd.read_csv(cluster_assignments_path)
+	cluster_labels = pd.read_csv(cluster_labels_path)
+
+	required_assignment_columns = {"session_id", "cluster_id"}
+	if not required_assignment_columns.issubset(cluster_assignments.columns):
+		missing = required_assignment_columns - set(cluster_assignments.columns)
+		raise ValueError(f"Missing required cluster assignment columns: {sorted(missing)}")
+
+	if "intent_label" in cluster_labels.columns:
+		cluster_label_column = "intent_label"
+	elif "label" in cluster_labels.columns:
+		cluster_label_column = "label"
+	else:
+		raise ValueError("Cluster labels file must contain either 'intent_label' or 'label'.")
+
+	labeled_assignments = cluster_assignments.merge(
+		cluster_labels[["cluster_id", cluster_label_column]],
+		on="cluster_id",
+		how="inner",
+	)
+
+	if labeled_assignments.empty:
+		raise ValueError("Cluster assignments and cluster labels produced an empty merge.")
+
+	raw_labels = labeled_assignments[cluster_label_column].copy()
+	labeled_assignments["label"] = _normalize_intent_labels(raw_labels)
+
+	session_label_conflicts = labeled_assignments.groupby("session_id")["label"].nunique()
+	conflicting_sessions = session_label_conflicts[session_label_conflicts > 1]
+	if not conflicting_sessions.empty:
+		sample_conflicts = conflicting_sessions.index.tolist()[:10]
+		raise ValueError(
+			"Found session_id values with conflicting cluster-derived labels. "
+			f"Sample session_ids: {sample_conflicts}"
+		)
+
+	return labeled_assignments[["session_id", "label"]].drop_duplicates(
+		subset=["session_id"], keep="first"
+	)
+
+
 def _build_session_sequences(
 	click_features: pd.DataFrame,
 	feature_columns: list[str],
@@ -188,8 +270,8 @@ def _apply_standardization(
 def prepare_rnn_training_data(
 	clickstream: pd.DataFrame,
 	n_clicks: int = 5,
-	min_session_clicks: int = 8,
-	min_high_price_share: float = 0.5,
+	cluster_assignments_path: Path = CLUSTER_OUTPUTS_DIR / "cluster_assignments.csv",
+	cluster_labels_path: Path = CLUSTER_OUTPUTS_DIR / "cluster_label.csv",
 ) -> SequenceDataset:
 	"""
 	Create sequence data trimmed to first n clicks per session.
@@ -201,20 +283,15 @@ def prepare_rnn_training_data(
 		n_clicks,
 	)
 
-	strategy = ProxyHybridIntentLabelStrategy(
-		min_session_clicks=min_session_clicks,
-		min_high_price_share=min_high_price_share,
+	labels = _load_session_labels_from_cluster_files(
+		cluster_assignments_path=cluster_assignments_path,
+		cluster_labels_path=cluster_labels_path,
 	)
-	labels = generate_session_labels(
-		clickstream=clickstream,
-		label_strategy=strategy,
-		session_ids=click_features["session_id"].drop_duplicates(),
-	)
-	labels = labels.dropna(subset=["label"])
-	labels["label"] = labels["label"].astype(int)
 
 	valid_session_ids = set(labels["session_id"].astype(int).tolist())
 	click_features = click_features[click_features["session_id"].isin(valid_session_ids)].copy()
+	if click_features.empty:
+		raise ValueError("No sessions remain after joining first-N click features with cluster labels.")
 
 	feature_columns = _extract_numeric_sequence_columns(click_features)
 	session_ids, sequences = _build_session_sequences(click_features, feature_columns)
@@ -306,6 +383,8 @@ def save_rnn_artifacts(
 @app.command()
 def main(
 	raw_data_path: Path = RAW_DATA_DIR / "e-shop clothing 2008.csv",
+	cluster_assignments_path: Path = CLUSTER_OUTPUTS_DIR / "cluster_assignments.csv",
+	cluster_labels_path: Path = CLUSTER_OUTPUTS_DIR / "cluster_label.csv",
 	model_output_path: Path = MODELS_DIR / "rnn_first_n_clicks_model.npz",
 	n_clicks: int = 5,
 	hidden_size: int = 32,
@@ -313,8 +392,6 @@ def main(
 	epochs: int = 30,
 	test_size: float = 0.2,
 	random_state: int = 42,
-	min_session_clicks: int = 8,
-	min_high_price_share: float = 0.5,
 ) -> None:
 	"""Train a simple RNN on first-n-click trimmed sessions to predict purchase-intent probability."""
 
@@ -324,8 +401,8 @@ def main(
 	dataset = prepare_rnn_training_data(
 		clickstream=clickstream,
 		n_clicks=n_clicks,
-		min_session_clicks=min_session_clicks,
-		min_high_price_share=min_high_price_share,
+		cluster_assignments_path=cluster_assignments_path,
+		cluster_labels_path=cluster_labels_path,
 	)
 	logger.info(
 		"Prepared {} sessions with sequence length <= {} and {} features per click.",

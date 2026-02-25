@@ -26,16 +26,12 @@ from online_retail_prediction.config import (
     FIGURES_DIR,
     MODELS_DIR,
     PROCESSED_DATA_DIR,
-    RAW_DATA_DIR,
+    PROJ_ROOT,
     REPORTS_DIR,
-)
-from online_retail_prediction.modeling.feature_engineering import build_session_features
-from online_retail_prediction.modeling.labeling import (
-    ProxyHybridIntentLabelStrategy,
-    generate_session_labels,
 )
 
 app = typer.Typer()
+CLUSTER_OUTPUTS_DIR = PROJ_ROOT / "data" / "cluster_outputs"
 
 SUPPORTED_MODEL_TYPES = [
     "logistic_regression",
@@ -48,30 +44,89 @@ SUPPORTED_MODEL_TYPES = [
 
 
 def load_and_prepare_data(
-    raw_data_path: Path,
-    n_clicks: int = 5,
-    min_session_clicks: int = 8,
-    min_high_price_share: float = 0.5,
+    features_path: Path,
+    cluster_assignments_path: Path,
+    cluster_labels_path: Path,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load raw data and generate features and labels."""
-    logger.info(f"Loading raw data from {raw_data_path}...")
-    clickstream = pd.read_csv(raw_data_path, sep=";")
-    logger.info(f"Loaded {len(clickstream)} clicks")
+    """Load precomputed features and build session labels from cluster output files."""
+    logger.info(f"Loading features from {features_path}...")
+    features = pd.read_csv(features_path)
+    logger.info(f"Loaded features for {len(features)} sessions")
 
-    logger.info(f"Building session features using first {n_clicks} clicks...")
-    features = build_session_features(clickstream, n_clicks=n_clicks)
-    logger.info(f"Generated features for {len(features)} sessions")
+    logger.info(f"Loading cluster assignments from {cluster_assignments_path}...")
+    cluster_assignments = pd.read_csv(cluster_assignments_path)
+    logger.info(f"Loading cluster labels from {cluster_labels_path}...")
+    cluster_labels = pd.read_csv(cluster_labels_path)
 
-    logger.info("Generating labels using ProxyHybridIntentLabelStrategy...")
-    strategy = ProxyHybridIntentLabelStrategy(
-        min_session_clicks=min_session_clicks, min_high_price_share=min_high_price_share
+    required_feature_columns = {"session_id"}
+    required_assignment_columns = {"session_id", "cluster_id"}
+
+    if not required_feature_columns.issubset(features.columns):
+        missing = required_feature_columns - set(features.columns)
+        raise ValueError(f"Missing required feature columns: {sorted(missing)}")
+
+    if not required_assignment_columns.issubset(cluster_assignments.columns):
+        missing = required_assignment_columns - set(cluster_assignments.columns)
+        raise ValueError(f"Missing required cluster assignment columns: {sorted(missing)}")
+
+    if "intent_label" in cluster_labels.columns:
+        cluster_label_column = "intent_label"
+    elif "label" in cluster_labels.columns:
+        cluster_label_column = "label"
+    else:
+        raise ValueError("Cluster labels file must contain either 'intent_label' or 'label'.")
+
+    labels = cluster_assignments.merge(
+        cluster_labels[["cluster_id", cluster_label_column]],
+        on="cluster_id",
+        how="inner",
     )
-    labels = generate_session_labels(
-        clickstream, label_strategy=strategy, session_ids=features["session_id"]
-    )
-    logger.info(
-        f"Label distribution: {labels['label'].value_counts().to_dict()}"
-    )
+
+    if labels.empty:
+        raise ValueError("Cluster assignments and cluster labels produced an empty merge.")
+
+    labels = labels.drop(columns=["cluster_id"]).rename(columns={cluster_label_column: "label"})
+
+    raw_labels = labels["label"].copy()
+    if pd.api.types.is_numeric_dtype(labels["label"]):
+        labels["label"] = labels["label"].astype(int)
+    else:
+        labels["label"] = (
+            labels["label"]
+            .astype(str)
+            .str.strip()
+            .str.lower()
+            .map(
+                {
+                    "low-intent": 0,
+                    "low_intent": 0,
+                    "low intent": 0,
+                    "0": 0,
+                    "high-intent": 1,
+                    "high_intent": 1,
+                    "high intent": 1,
+                    "1": 1,
+                }
+            )
+        )
+
+    if labels["label"].isna().any():
+        invalid_values = sorted(raw_labels[labels["label"].isna()].astype(str).unique().tolist())
+        raise ValueError(f"Unsupported intent labels found in cluster labels: {invalid_values}")
+
+    labels["label"] = labels["label"].astype(int)
+
+    session_label_conflicts = labels.groupby("session_id")["label"].nunique()
+    conflicting_sessions = session_label_conflicts[session_label_conflicts > 1]
+    if not conflicting_sessions.empty:
+        sample_conflicts = conflicting_sessions.index.tolist()[:10]
+        raise ValueError(
+            "Found session_id values with conflicting cluster-derived labels. "
+            f"Sample session_ids: {sample_conflicts}"
+        )
+
+    labels = labels.drop_duplicates(subset=["session_id"], keep="first")
+    logger.info(f"Label distribution: {labels['label'].value_counts().to_dict()}")
 
     return features, labels
 
@@ -94,7 +149,7 @@ def prepare_train_test_split(
     X = X[numeric_cols]
 
     logger.info(f"Using {len(feature_cols)} features: {list(X.columns)}")
-    logger.info(f"Class distribution: 0={sum(y==0)}, 1={sum(y==1)}")
+    logger.info(f"Class distribution: 0={sum(y == 0)}, 1={sum(y == 1)}")
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state, stratify=y
@@ -330,13 +385,13 @@ def run_model_comparison(
 
 @app.command()
 def main(
-    raw_data_path: Path = RAW_DATA_DIR / "e-shop clothing 2008.csv",
+    features_path: Path = PROCESSED_DATA_DIR / "features_first_n.csv",
+    cluster_assignments_path: Path = CLUSTER_OUTPUTS_DIR / "cluster_assignments.csv",
+    cluster_labels_path: Path = CLUSTER_OUTPUTS_DIR / "cluster_label.csv",
     model_path: Path = MODELS_DIR / "baseline_model.pkl",
     model_type: str = "logistic_regression",
-    n_clicks: int = 5,
     test_size: float = 0.2,
     random_state: int = 42,
-    save_features: bool = True,
     tune: bool = False,
     scoring: str = "roc_auc",
     cv: int = 5,
@@ -345,14 +400,14 @@ def main(
     Train a model to predict purchase intent.
 
     Args:
-        raw_data_path: Path to raw clickstream data
+        features_path: Path to processed feature table (must include session_id)
+        cluster_assignments_path: Path to cluster assignment file (session_id, cluster_id)
+        cluster_labels_path: Path to cluster label file (cluster_id, intent_label)
         model_path: Path to save trained model
         model_type: Type of model ('logistic_regression', 'random_forest', 'knn',
             'xgboost', 'lightgbm', or 'all' for full comparison)
-        n_clicks: Number of initial clicks to use for features
         test_size: Fraction of data to use for testing
         random_state: Random seed for reproducibility
-        save_features: Whether to save features and labels to processed data directory
         tune: Enable hyperparameter tuning with GridSearchCV
         scoring: Metric to optimize when tuning ('roc_auc', 'f1', 'accuracy', 'precision', 'recall')
         cv: Number of cross-validation folds for tuning
@@ -363,16 +418,11 @@ def main(
     if model_type not in SUPPORTED_MODEL_TYPES:
         raise ValueError(f"Unsupported model_type: {model_type}. Use one of {SUPPORTED_MODEL_TYPES}.")
 
-    features, labels = load_and_prepare_data(raw_data_path, n_clicks=n_clicks)
-
-    if save_features:
-        PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        features_path = PROCESSED_DATA_DIR / "features.csv"
-        labels_path = PROCESSED_DATA_DIR / "labels.csv"
-        features.to_csv(features_path, index=False)
-        labels.to_csv(labels_path, index=False)
-        logger.info(f"Saved features to {features_path}")
-        logger.info(f"Saved labels to {labels_path}")
+    features, labels = load_and_prepare_data(
+        features_path=features_path,
+        cluster_assignments_path=cluster_assignments_path,
+        cluster_labels_path=cluster_labels_path,
+    )
 
     X_train, X_test, y_train, y_test = prepare_train_test_split(
         features, labels, test_size=test_size, random_state=random_state
@@ -394,14 +444,17 @@ def main(
         if model_type not in {"logistic_regression", "random_forest"}:
             raise ValueError("Tuning is currently supported only for logistic_regression and random_forest")
         model, best_params, cv_results = train_tuned_model(
-            X_train, y_train,
+            X_train,
+            y_train,
             model_type=model_type,
             scoring=scoring,
             cv=cv,
             random_state=random_state,
         )
     else:
-        model = train_baseline_model(X_train, y_train, model_type=model_type, random_state=random_state)
+        model = train_baseline_model(
+            X_train, y_train, model_type=model_type, random_state=random_state
+        )
 
     train_metrics = evaluate_model(model, X_train, y_train, split_name="train")
     test_metrics = evaluate_model(model, X_test, y_test, split_name="test")
@@ -411,7 +464,9 @@ def main(
         train_val = train_metrics[metric_name]
         test_val = test_metrics[metric_name]
         diff = train_val - test_val
-        logger.info(f"{metric_name.upper()}: Train={train_val:.4f}, Test={test_val:.4f}, Diff={diff:+.4f}")
+        logger.info(
+            f"{metric_name.upper()}: Train={train_val:.4f}, Test={test_val:.4f}, Diff={diff:+.4f}"
+        )
 
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, model_path)

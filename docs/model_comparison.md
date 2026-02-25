@@ -111,5 +111,5 @@ Actual No(0)  3042    964
 - `baseline_rf_model.pkl` - Random Forest model  
 - `baseline_model_metrics.txt` - LR metrics
 - `baseline_rf_model_metrics.txt` - RF metrics
-- `features.csv` - Processed session features
-- `labels.csv` - Generated labels
+- `features_first_n.csv` - Processed session features for training
+- `baseline_labels.csv` - Generated labels

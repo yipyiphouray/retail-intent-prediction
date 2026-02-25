@@ -1,11 +1,13 @@
 """Tests for RNN data preparation using only first-N clicks per session."""
 
+from pathlib import Path
+
 import pandas as pd
 
 from online_retail_prediction.modeling.RNN_train import prepare_rnn_training_data
 
 
-def test_prepare_rnn_data_trims_sequences_to_first_n_clicks() -> None:
+def test_prepare_rnn_data_trims_sequences_to_first_n_clicks(tmp_path: Path) -> None:
     clickstream = pd.DataFrame(
         {
             "session ID": [1, 1, 1, 2],
@@ -20,11 +22,28 @@ def test_prepare_rnn_data_trims_sequences_to_first_n_clicks() -> None:
         }
     )
 
+    cluster_assignments = pd.DataFrame(
+        {
+            "session_id": [1, 2],
+            "cluster_id": [0, 1],
+        }
+    )
+    cluster_labels = pd.DataFrame(
+        {
+            "cluster_id": [0, 1],
+            "intent_label": ["low-intent", "high-intent"],
+        }
+    )
+    cluster_assignments_path = tmp_path / "cluster_assignments.csv"
+    cluster_labels_path = tmp_path / "cluster_label.csv"
+    cluster_assignments.to_csv(cluster_assignments_path, index=False)
+    cluster_labels.to_csv(cluster_labels_path, index=False)
+
     dataset = prepare_rnn_training_data(
         clickstream=clickstream,
         n_clicks=2,
-        min_session_clicks=1,
-        min_high_price_share=0.0,
+        cluster_assignments_path=cluster_assignments_path,
+        cluster_labels_path=cluster_labels_path,
     )
 
     assert len(dataset.sequences) == 2

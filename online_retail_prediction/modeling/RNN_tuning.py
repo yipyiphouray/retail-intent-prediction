@@ -7,13 +7,14 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import typer
 
-from online_retail_prediction.config import FIGURES_DIR, RAW_DATA_DIR, REPORTS_DIR
+from online_retail_prediction.config import FIGURES_DIR, PROJ_ROOT, RAW_DATA_DIR, REPORTS_DIR
 from online_retail_prediction.modeling.RNN_train import (
 	prepare_rnn_training_data,
 	train_rnn_model,
 )
 
 app = typer.Typer()
+CLUSTER_OUTPUTS_DIR = PROJ_ROOT / "data" / "cluster_outputs"
 
 
 def _plot_results(results: pd.DataFrame, output_path: Path) -> None:
@@ -38,6 +39,8 @@ def _plot_results(results: pd.DataFrame, output_path: Path) -> None:
 @app.command()
 def main(
 	raw_data_path: Path = RAW_DATA_DIR / "e-shop clothing 2008.csv",
+	cluster_assignments_path: Path = CLUSTER_OUTPUTS_DIR / "cluster_assignments.csv",
+	cluster_labels_path: Path = CLUSTER_OUTPUTS_DIR / "cluster_label.csv",
 	start_n: int = 2,
 	end_n: int = 10,
 	hidden_size: int = 8,
@@ -45,8 +48,6 @@ def main(
 	epochs: int = 1,
 	test_size: float = 0.2,
 	random_state: int = 42,
-	min_session_clicks: int = 8,
-	min_high_price_share: float = 0.5,
 	metrics_output_path: Path = REPORTS_DIR / "rnn_n_clicks_metrics.csv",
 	plot_output_path: Path = FIGURES_DIR / "rnn_n_clicks_performance.png",
 ) -> None:
@@ -66,8 +67,8 @@ def main(
 		dataset = prepare_rnn_training_data(
 			clickstream=clickstream,
 			n_clicks=n_clicks,
-			min_session_clicks=min_session_clicks,
-			min_high_price_share=min_high_price_share,
+			cluster_assignments_path=cluster_assignments_path,
+			cluster_labels_path=cluster_labels_path,
 		)
 		_, metrics, _ = train_rnn_model(
 			dataset=dataset,

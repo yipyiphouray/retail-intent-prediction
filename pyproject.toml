@@ -41,6 +41,7 @@ dev = [
     "notebook",
     "pytest",
     "ruff",
+    "streamlit",
 ]
 
 

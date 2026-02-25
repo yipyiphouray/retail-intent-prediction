@@ -1,9 +1,10 @@
-DEFAULT_CLUSTER_COUNT = 10
+DEFAULT_CLUSTER_COUNT = 8
 DEFAULT_CORRELATION_THRESHOLD = 0.7
 DEFAULT_DROP_CORRELATED = True
 DEFAULT_DROP_LOW_VARIANCE = False
 DEFAULT_MIN_VARIANCE = 1e-8
 
+# Excludes features that treat lags, that cause multicollinearity and that are not interpretable for the business, such as model frequency features.
 ALLOWED_CLUSTER_FEATURES = [
     "n_clicks_observed",
     "n_unique_pages",

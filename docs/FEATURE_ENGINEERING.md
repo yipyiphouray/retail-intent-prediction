@@ -1,13 +1,13 @@
 # Feature Engineering
 
 ## Purpose
-This module builds **session-level model features** using only the first `N` clicks of each session.
+This module builds **session-level model features** using either the first `N` clicks or the full session length.
 
 - File: `online_retail_prediction/modeling/feature_engineering.py`
-- Main function: `build_session_features(clickstream, n_clicks=5)`
+- Main function: `build_session_features(clickstream, n_clicks=5, aggregation_mode="first_n")`
 - Orchestration entrypoint: `online_retail_prediction/features.py`
 
-This design prevents leakage from later clicks by restricting feature construction to early-session behavior.
+This design supports both leakage-safe training features (first-N) and full-session behavioral features (clustering/labeling workflows).
 
 ## Input Data Expectations
 The click-level input must include (after normalization):
@@ -32,7 +32,9 @@ Raw dataset columns are normalized to snake_case and mapped when needed:
 ## Feature Construction Logic
 1. Validate required columns and coerce key fields to numeric where needed.
 2. Sort by `session_id` and `order`.
-3. Keep first `N` rows per session.
+3. Select clicks per mode:
+  - `aggregation_mode="first_n"`: keep first `N` rows per session.
+  - `aggregation_mode="full_session"`: keep all rows per session.
 4. Aggregate one row per session.
 
 ## Feature Families
@@ -64,10 +66,12 @@ Current feature families include:
 
 When run through `online_retail_prediction/features.py`, features are saved to:
 
-- `data/processed/features.csv`
+- `data/processed/features_first_n.csv`
+- `data/processed/features_full_session.csv`
 
 ## Leakage Boundary
-Feature engineering uses only first `N` clicks by design. Any signal from clicks after `N` is excluded from feature values.
+- `first_n` mode uses only first `N` clicks by design. Any signal from clicks after `N` is excluded.
+- `full_session` mode uses all available clicks per session.
 
 ## Example Usage
 From the project root:
@@ -80,8 +84,9 @@ uv run python -m online_retail_prediction.features \
 
 This generates:
 
-- `data/processed/features.csv`
-- `data/processed/labels.csv` (labels come from labeling module, not feature engineering)
+- `data/processed/features_first_n.csv`
+- `data/processed/features_full_session.csv`
+- `data/processed/baseline_labels.csv` (labels come from labeling module, not feature engineering)
 
 ## Detailed feature definitions (every engineered column)
 
