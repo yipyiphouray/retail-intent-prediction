@@ -188,4 +188,4 @@ cython_debug/
 .pypirc
 
 # .pkl files
-*.pkl
+models/*.pkl
