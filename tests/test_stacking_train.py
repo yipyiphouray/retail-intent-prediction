@@ -9,7 +9,7 @@ from sklearn.linear_model import LogisticRegression
 from online_retail_prediction.modeling import stacking_train
 
 
-def _write_sample_features_labels(tmp_path: Path) -> tuple[Path, Path]:
+def _write_sample_data(tmp_path: Path) -> tuple[Path, Path, Path]:
     features = pd.DataFrame(
         {
             "session_id": list(range(1, 13)),
@@ -18,18 +18,26 @@ def _write_sample_features_labels(tmp_path: Path) -> tuple[Path, Path]:
             "feature_3": [5, 4, 3, 2, 1, 0, 1, 2, 3, 4, 5, 6],
         }
     )
-    labels = pd.DataFrame(
+    cluster_assignments = pd.DataFrame(
         {
             "session_id": list(range(1, 13)),
-            "label": [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+            "cluster_id": [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+        }
+    )
+    cluster_labels = pd.DataFrame(
+        {
+            "cluster_id": [0, 1],
+            "intent_label": ["low-intent", "high-intent"],
         }
     )
 
     features_path = tmp_path / "features.csv"
-    labels_path = tmp_path / "labels.csv"
+    assignments_path = tmp_path / "cluster_assignments.csv"
+    labels_path = tmp_path / "cluster_label.csv"
     features.to_csv(features_path, index=False)
-    labels.to_csv(labels_path, index=False)
-    return features_path, labels_path
+    cluster_assignments.to_csv(assignments_path, index=False)
+    cluster_labels.to_csv(labels_path, index=False)
+    return features_path, assignments_path, labels_path
 
 
 def test_build_base_estimator_configs_returns_all_models():
@@ -48,15 +56,17 @@ def test_build_base_estimator_configs_returns_all_models():
 
 
 def test_tune_base_estimator_returns_fitted_model(tmp_path: Path):
-    features_path, labels_path = _write_sample_features_labels(tmp_path)
-    X, y = stacking_train.load_processed_features_and_labels(features_path, labels_path)
+    features_path, assignments_path, labels_path = _write_sample_data(tmp_path)
+    X, y = stacking_train.load_processed_features_and_labels(
+        features_path, cluster_assignments_path=assignments_path, cluster_labels_path=labels_path
+    )
     X_train, _, y_train, _ = stacking_train.split_data(X, y, test_size=0.25, random_state=42)
 
     configs = stacking_train.build_base_estimator_configs(random_state=42)
     estimator, _ = configs["logistic_regression"]
     tiny_grid = {"classifier__C": [1.0], "classifier__solver": ["lbfgs"]}
 
-    best_model, best_params, best_score = stacking_train.tune_base_estimator(
+    best_model, best_params, best_score, cv_results = stacking_train.tune_base_estimator(
         name="logistic_regression",
         estimator=estimator,
         param_grid=tiny_grid,
@@ -69,6 +79,9 @@ def test_tune_base_estimator_returns_fitted_model(tmp_path: Path):
     assert isinstance(best_params, dict)
     assert isinstance(best_score, float)
     assert 0.0 <= best_score <= 1.0
+    assert isinstance(cv_results, pd.DataFrame)
+    assert "mean_test_score" in cv_results.columns
+    assert "mean_train_score" in cv_results.columns
 
 
 def test_build_stacking_classifier_creates_valid_stack():
@@ -85,8 +98,10 @@ def test_build_stacking_classifier_creates_valid_stack():
 
 
 def test_evaluate_model_returns_required_metrics(tmp_path: Path):
-    features_path, labels_path = _write_sample_features_labels(tmp_path)
-    X, y = stacking_train.load_processed_features_and_labels(features_path, labels_path)
+    features_path, assignments_path, labels_path = _write_sample_data(tmp_path)
+    X, y = stacking_train.load_processed_features_and_labels(
+        features_path, cluster_assignments_path=assignments_path, cluster_labels_path=labels_path
+    )
     X_train, X_test, y_train, y_test = stacking_train.split_data(
         X, y, test_size=0.25, random_state=42
     )
@@ -111,7 +126,7 @@ def test_evaluate_model_returns_required_metrics(tmp_path: Path):
 
 
 def test_main_creates_model_artifacts(tmp_path: Path, monkeypatch):
-    features_path, labels_path = _write_sample_features_labels(tmp_path)
+    features_path, assignments_path, labels_path = _write_sample_data(tmp_path)
     output_dir = tmp_path / "models"
 
     original_build = stacking_train.build_base_estimator_configs
@@ -153,13 +168,28 @@ def test_main_creates_model_artifacts(tmp_path: Path, monkeypatch):
 
     stacking_train.main(
         features_path=features_path,
-        labels_path=labels_path,
+        cluster_assignments_path=assignments_path,
+        cluster_labels_path=labels_path,
         output_dir=output_dir,
         test_size=0.25,
         cv=2,
         random_state=42,
     )
 
-    assert (output_dir / "stacking_model.pkl").exists()
-    assert (output_dir / "stacking_metrics.txt").exists()
-    assert (output_dir / "stacking_base_estimator_comparison.csv").exists()
+    assert (output_dir / "stacking_ensemble_model.pkl").exists()
+    assert (output_dir / "stacking_ensemble_metrics.txt").exists()
+    assert (output_dir / "stacking_ensemble_base_comparison.csv").exists()
+
+    # Individual best base estimator models
+    assert (output_dir / "stacking_base_logistic_regression.pkl").exists()
+    assert (output_dir / "stacking_base_random_forest.pkl").exists()
+    assert (output_dir / "stacking_base_xgboost.pkl").exists()
+    assert (output_dir / "stacking_base_lightgbm.pkl").exists()
+
+    # CV results for validation/learning curves
+    cv_results_dir = output_dir / "stacking_cv_results"
+    assert (cv_results_dir / "stacking_logistic_regression_cv_results.csv").exists()
+    assert (cv_results_dir / "stacking_random_forest_cv_results.csv").exists()
+    assert (cv_results_dir / "stacking_xgboost_cv_results.csv").exists()
+    assert (cv_results_dir / "stacking_lightgbm_cv_results.csv").exists()
+    assert (cv_results_dir / "stacking_meta_learner_cv_results.csv").exists()

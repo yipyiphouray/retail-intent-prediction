@@ -30,7 +30,10 @@ def get_model_feature_importance(
         importances = importances / importances.sum()
 
     result = (
-        importances.sort_values(ascending=False).rename("importance").reset_index(names="feature")
+        importances.sort_values(ascending=False)
+        .rename("importance")
+        .reset_index()
+        .rename(columns={"index": "feature"})
     )
     return result
 
