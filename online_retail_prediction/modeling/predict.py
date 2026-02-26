@@ -43,6 +43,7 @@ def _correct_frequency_features(
     feature_row: pd.DataFrame,
     clicks: pd.DataFrame,
     freq_path: Path,
+    n_clicks: int = 5,
 ) -> pd.DataFrame:
     """Replace within-session frequency features with training-set global frequencies.
 
@@ -56,7 +57,12 @@ def _correct_frequency_features(
     colour_freq = freqs["colour_freq"]
 
     prepared = _normalize_columns(clicks)
-    first_n = prepared.head(5)
+    prepared["order"] = pd.to_numeric(prepared["order"], errors="coerce")
+    prepared = prepared.sort_values("order")
+    first_n = prepared.head(n_clicks)
+
+    if first_n.empty:
+        return feature_row
 
     # Map each click's model to its global frequency
     click_model_freqs = first_n["page_2_model"].map(model_freq).fillna(0.0)
@@ -101,6 +107,9 @@ def predict_session(
     Returns:
         Dict with keys: label, probability, features.
     """
+    if clicks.empty:
+        raise ValueError("clicks DataFrame is empty — at least one click is required.")
+
     model = load_model(str(model_path))
     expected_features = [str(f) for f in model.feature_names_in_]
 
@@ -118,7 +127,7 @@ def predict_session(
     feature_row = feature_row[expected_features]
 
     # Correct frequency features using training-set global frequencies
-    feature_row = _correct_frequency_features(feature_row, clicks, freq_path)
+    feature_row = _correct_frequency_features(feature_row, clicks, freq_path, n_clicks)
 
     proba = model.predict_proba(feature_row)[0, 1]
     pred = model.predict(feature_row)[0]
