@@ -6,8 +6,26 @@ from pathlib import Path
 from loguru import logger
 import numpy as np
 import pandas as pd
+<<<<<<< HEAD
 from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.model_selection import train_test_split
+=======
+<<<<<<< HEAD
+from sklearn.metrics import (
+	accuracy_score,
+	cohen_kappa_score,
+	f1_score,
+	precision_score,
+	recall_score,
+	roc_auc_score,
+)
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold
+=======
+from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.model_selection import train_test_split
+>>>>>>> origin
+>>>>>>> origin/dev
 import typer
 
 from online_retail_prediction.config import MODELS_DIR, PROJ_ROOT, RAW_DATA_DIR
@@ -267,6 +285,29 @@ def _apply_standardization(
 	return [(sequence - mean) / std for sequence in sequences]
 
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+def _compute_split_metrics(
+	y_true: np.ndarray,
+	y_pred: np.ndarray,
+	y_prob: np.ndarray,
+	prefix: str,
+) -> dict[str, float]:
+	return {
+		f"{prefix}_accuracy": float(accuracy_score(y_true, y_pred)),
+		f"{prefix}_roc_auc": float(roc_auc_score(y_true, y_prob)),
+		f"{prefix}_precision": float(precision_score(y_true, y_pred, zero_division=0)),
+		f"{prefix}_recall": float(recall_score(y_true, y_pred, zero_division=0)),
+		f"{prefix}_f1": float(f1_score(y_true, y_pred, zero_division=0)),
+		f"{prefix}_macro_f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+		f"{prefix}_cohen_kappa": float(cohen_kappa_score(y_true, y_pred)),
+	}
+
+
+=======
+>>>>>>> origin
+>>>>>>> origin/dev
 def prepare_rnn_training_data(
 	clickstream: pd.DataFrame,
 	n_clicks: int = 5,
@@ -347,10 +388,21 @@ def train_rnn_model(
 	test_predictions = (test_probabilities >= 0.5).astype(int)
 
 	metrics = {
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+		**_compute_split_metrics(y_train, train_predictions, train_probabilities, "train"),
+		**_compute_split_metrics(y_test, test_predictions, test_probabilities, "test"),
+=======
+>>>>>>> origin/dev
 		"train_accuracy": float(accuracy_score(y_train, train_predictions)),
 		"test_accuracy": float(accuracy_score(y_test, test_predictions)),
 		"train_roc_auc": float(roc_auc_score(y_train, train_probabilities)),
 		"test_roc_auc": float(roc_auc_score(y_test, test_probabilities)),
+<<<<<<< HEAD
+=======
+>>>>>>> origin
+>>>>>>> origin/dev
 	}
 
 	artifacts = {
@@ -361,6 +413,78 @@ def train_rnn_model(
 	return model, metrics, artifacts
 
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+def cross_validate_rnn_model(
+	dataset: SequenceDataset,
+	hidden_size: int = 32,
+	learning_rate: float = 0.01,
+	epochs: int = 30,
+	n_splits: int = 5,
+	random_state: int = 42,
+) -> tuple[pd.DataFrame, dict[str, float]]:
+	if n_splits < 2:
+		raise ValueError("n_splits must be at least 2 for cross-validation")
+
+	labels = dataset.labels.astype(int)
+	class_counts = np.bincount(labels)
+	if len(class_counts) < 2 or class_counts.min() < n_splits:
+		raise ValueError(
+			"Insufficient samples per class for stratified CV. "
+			f"Minimum class count is {class_counts.min() if len(class_counts) > 0 else 0}, "
+			f"but n_splits={n_splits}."
+		)
+
+	indices = np.arange(len(dataset.sequences))
+	skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+
+	fold_results: list[dict[str, float | int]] = []
+	for fold, (train_idx, test_idx) in enumerate(skf.split(indices, labels), start=1):
+		train_sequences = [dataset.sequences[index] for index in train_idx]
+		test_sequences = [dataset.sequences[index] for index in test_idx]
+		y_train = dataset.labels[train_idx]
+		y_test = dataset.labels[test_idx]
+
+		mean, std = _fit_standardization(train_sequences)
+		train_sequences_scaled = _apply_standardization(train_sequences, mean=mean, std=std)
+		test_sequences_scaled = _apply_standardization(test_sequences, mean=mean, std=std)
+
+		model = SimpleSessionRNN(
+			input_size=len(dataset.feature_names),
+			hidden_size=hidden_size,
+			learning_rate=learning_rate,
+			random_state=random_state + fold,
+		)
+		model.fit(train_sequences_scaled, y_train, epochs=epochs)
+
+		train_probabilities = model.predict_proba(train_sequences_scaled)
+		test_probabilities = model.predict_proba(test_sequences_scaled)
+
+		train_predictions = (train_probabilities >= 0.5).astype(int)
+		test_predictions = (test_probabilities >= 0.5).astype(int)
+
+		fold_metrics = {
+			"fold": fold,
+			**_compute_split_metrics(y_train, train_predictions, train_probabilities, "train"),
+			**_compute_split_metrics(y_test, test_predictions, test_probabilities, "test"),
+		}
+		fold_results.append(fold_metrics)
+
+	fold_results_df = pd.DataFrame(fold_results).sort_values("fold").reset_index(drop=True)
+
+	summary_metrics: dict[str, float] = {}
+	metric_columns = [column for column in fold_results_df.columns if column != "fold"]
+	for column in metric_columns:
+		summary_metrics[f"cv_mean_{column}"] = float(fold_results_df[column].mean())
+		summary_metrics[f"cv_std_{column}"] = float(fold_results_df[column].std(ddof=0))
+
+	return fold_results_df, summary_metrics
+
+
+=======
+>>>>>>> origin
+>>>>>>> origin/dev
 def save_rnn_artifacts(
 	model: SimpleSessionRNN,
 	artifacts: dict[str, np.ndarray | list[str]],
@@ -425,11 +549,38 @@ def main(
 
 	logger.success(f"Saved RNN artifacts to {model_output_path}")
 	logger.info(
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+		"Metrics: train_accuracy={:.4f}, train_roc_auc={:.4f}, train_precision={:.4f}, "
+		"train_recall={:.4f}, train_f1={:.4f}, train_macro_f1={:.4f}, train_cohen_kappa={:.4f}, "
+		"test_accuracy={:.4f}, test_roc_auc={:.4f}, test_precision={:.4f}, test_recall={:.4f}, "
+		"test_f1={:.4f}, test_macro_f1={:.4f}, test_cohen_kappa={:.4f}",
+		metrics["train_accuracy"],
+		metrics["train_roc_auc"],
+		metrics["train_precision"],
+		metrics["train_recall"],
+		metrics["train_f1"],
+		metrics["train_macro_f1"],
+		metrics["train_cohen_kappa"],
+		metrics["test_accuracy"],
+		metrics["test_roc_auc"],
+		metrics["test_precision"],
+		metrics["test_recall"],
+		metrics["test_f1"],
+		metrics["test_macro_f1"],
+		metrics["test_cohen_kappa"],
+=======
+>>>>>>> origin/dev
 		"Metrics: train_accuracy={:.4f}, test_accuracy={:.4f}, train_roc_auc={:.4f}, test_roc_auc={:.4f}",
 		metrics["train_accuracy"],
 		metrics["test_accuracy"],
 		metrics["train_roc_auc"],
 		metrics["test_roc_auc"],
+<<<<<<< HEAD
+=======
+>>>>>>> origin
+>>>>>>> origin/dev
 	)
 
 
