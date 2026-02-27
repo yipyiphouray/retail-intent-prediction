@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import json
 from pathlib import Path
+from typing import Any
 
 import joblib
 from loguru import logger
@@ -83,11 +84,91 @@ def _correct_frequency_features(
     feature_row["last_category_frequency"] = category_freq.get(
         str(last_click["main_category"]), 0.0
     )
-    feature_row["last_colour_frequency"] = colour_freq.get(
-        str(last_click["colour"]), 0.0
-    )
+    feature_row["last_colour_frequency"] = colour_freq.get(str(last_click["colour"]), 0.0)
 
     return feature_row
+
+
+class InferencePipeline:
+    """Reusable first-N click inference pipeline for session-level intent prediction."""
+
+    def __init__(
+        self,
+        model_path: Path = MODELS_DIR / "stacking_ensemble_model.pkl",
+        freq_path: Path = DEFAULT_FREQ_PATH,
+        n_clicks: int = 5,
+    ) -> None:
+        self.model_path = model_path
+        self.freq_path = freq_path
+        self.n_clicks = n_clicks
+
+    def _normalize_and_validate_clicks(self, clicks: pd.DataFrame) -> pd.DataFrame:
+        if clicks.empty:
+            raise ValueError("clicks DataFrame is empty — at least one click is required.")
+
+        prepared = _normalize_columns(clicks)
+
+        if "session_id" not in prepared.columns:
+            raise ValueError(
+                "clicks DataFrame is missing session identifier column (`session_id` or `session ID`)."
+            )
+        if "order" not in prepared.columns:
+            raise ValueError("clicks DataFrame is missing required `order` column.")
+
+        prepared["session_id"] = pd.to_numeric(prepared["session_id"], errors="coerce")
+        unique_session_ids = prepared["session_id"].dropna().astype(int).unique()
+        if len(unique_session_ids) != 1:
+            raise ValueError(
+                "clicks DataFrame must contain exactly one session_id for single-session inference."
+            )
+
+        prepared["order"] = pd.to_numeric(prepared["order"], errors="coerce")
+        return prepared.sort_values("order").reset_index(drop=True)
+
+    def _predict_prepared_clicks(self, prepared_clicks: pd.DataFrame) -> dict[str, Any]:
+        model = load_model(str(self.model_path))
+        expected_features = [str(f) for f in model.feature_names_in_]
+
+        features_df = build_session_features(
+            prepared_clicks,
+            n_clicks=self.n_clicks,
+            aggregation_mode="first_n",
+        )
+
+        feature_row = features_df.drop(columns=["session_id"], errors="ignore")
+
+        for col in expected_features:
+            if col not in feature_row.columns:
+                feature_row[col] = 0.0
+        feature_row = feature_row[expected_features]
+
+        feature_row = _correct_frequency_features(
+            feature_row=feature_row,
+            clicks=prepared_clicks,
+            freq_path=self.freq_path,
+            n_clicks=self.n_clicks,
+        )
+
+        proba = model.predict_proba(feature_row)[0, 1]
+        pred = model.predict(feature_row)[0]
+
+        return {
+            "label": LABEL_MAP[int(pred)],
+            "probability": round(float(proba), 4),
+            "features": feature_row.iloc[0].to_dict(),
+        }
+
+    def predict_session(self, clicks: pd.DataFrame) -> dict[str, Any]:
+        """Run prediction for one session's clickstream."""
+        prepared_clicks = self._normalize_and_validate_clicks(clicks)
+        return self._predict_prepared_clicks(prepared_clicks)
+
+    def predict_rows(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
+        """Run prediction from a list of click rows."""
+        if not rows:
+            raise ValueError("rows is empty — at least one click row is required.")
+        clicks_df = pd.DataFrame(rows)
+        return self.predict_session(clicks_df)
 
 
 def predict_session(
@@ -95,48 +176,13 @@ def predict_session(
     model_path: Path = MODELS_DIR / "stacking_ensemble_model.pkl",
     freq_path: Path = DEFAULT_FREQ_PATH,
     n_clicks: int = 5,
-) -> dict:
-    """Run the full inference pipeline for a single session.
-
-    Args:
-        clicks: Raw click-level DataFrame for one session.
-        model_path: Path to the trained stacking ensemble .pkl file.
-        freq_path: Path to pre-computed training frequency tables.
-        n_clicks: Number of initial clicks to use for features.
-
-    Returns:
-        Dict with keys: label, probability, features.
-    """
-    if clicks.empty:
-        raise ValueError("clicks DataFrame is empty — at least one click is required.")
-
-    model = load_model(str(model_path))
-    expected_features = [str(f) for f in model.feature_names_in_]
-
-    features_df = build_session_features(
-        clicks, n_clicks=n_clicks, aggregation_mode="first_n"
-    )
-
-    # Drop session_id — not a model feature
-    feature_row = features_df.drop(columns=["session_id"], errors="ignore")
-
-    # Align columns: add any missing features as 0.0, reorder to match model
-    for col in expected_features:
-        if col not in feature_row.columns:
-            feature_row[col] = 0.0
-    feature_row = feature_row[expected_features]
-
-    # Correct frequency features using training-set global frequencies
-    feature_row = _correct_frequency_features(feature_row, clicks, freq_path, n_clicks)
-
-    proba = model.predict_proba(feature_row)[0, 1]
-    pred = model.predict(feature_row)[0]
-
-    return {
-        "label": LABEL_MAP[int(pred)],
-        "probability": round(float(proba), 4),
-        "features": feature_row.iloc[0].to_dict(),
-    }
+) -> dict[str, Any]:
+    """Backward-compatible function wrapper around :class:`InferencePipeline`."""
+    return InferencePipeline(
+        model_path=model_path,
+        freq_path=freq_path,
+        n_clicks=n_clicks,
+    ).predict_session(clicks)
 
 
 @app.command()

@@ -54,6 +54,16 @@ test:
 cluster_ui:
 	$(UV) run streamlit run apps/cluster_labeling_app.py
 
+## Run demo inference API locally
+.PHONY: api
+api:
+	$(UV) run uvicorn online_retail_prediction.api.app:app --reload
+
+## Run React demo storefront locally
+.PHONY: demo_ui
+demo_ui:
+	cd apps/demo_storefront && npm install && npm run dev
+
 ## Update uv lockfile
 .PHONY: lock
 lock:
