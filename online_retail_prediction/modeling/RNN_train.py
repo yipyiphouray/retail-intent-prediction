@@ -6,6 +6,7 @@ from pathlib import Path
 from loguru import logger
 import numpy as np
 import pandas as pd
+<<<<<<< HEAD
 from sklearn.metrics import (
 	accuracy_score,
 	cohen_kappa_score,
@@ -16,6 +17,10 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import StratifiedKFold
+=======
+from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.model_selection import train_test_split
+>>>>>>> origin
 import typer
 
 from online_retail_prediction.config import MODELS_DIR, PROJ_ROOT, RAW_DATA_DIR
@@ -275,6 +280,7 @@ def _apply_standardization(
 	return [(sequence - mean) / std for sequence in sequences]
 
 
+<<<<<<< HEAD
 def _compute_split_metrics(
 	y_true: np.ndarray,
 	y_pred: np.ndarray,
@@ -292,6 +298,8 @@ def _compute_split_metrics(
 	}
 
 
+=======
+>>>>>>> origin
 def prepare_rnn_training_data(
 	clickstream: pd.DataFrame,
 	n_clicks: int = 5,
@@ -372,8 +380,15 @@ def train_rnn_model(
 	test_predictions = (test_probabilities >= 0.5).astype(int)
 
 	metrics = {
+<<<<<<< HEAD
 		**_compute_split_metrics(y_train, train_predictions, train_probabilities, "train"),
 		**_compute_split_metrics(y_test, test_predictions, test_probabilities, "test"),
+=======
+		"train_accuracy": float(accuracy_score(y_train, train_predictions)),
+		"test_accuracy": float(accuracy_score(y_test, test_predictions)),
+		"train_roc_auc": float(roc_auc_score(y_train, train_probabilities)),
+		"test_roc_auc": float(roc_auc_score(y_test, test_probabilities)),
+>>>>>>> origin
 	}
 
 	artifacts = {
@@ -384,6 +399,7 @@ def train_rnn_model(
 	return model, metrics, artifacts
 
 
+<<<<<<< HEAD
 def cross_validate_rnn_model(
 	dataset: SequenceDataset,
 	hidden_size: int = 32,
@@ -450,6 +466,8 @@ def cross_validate_rnn_model(
 	return fold_results_df, summary_metrics
 
 
+=======
+>>>>>>> origin
 def save_rnn_artifacts(
 	model: SimpleSessionRNN,
 	artifacts: dict[str, np.ndarray | list[str]],
@@ -514,6 +532,7 @@ def main(
 
 	logger.success(f"Saved RNN artifacts to {model_output_path}")
 	logger.info(
+<<<<<<< HEAD
 		"Metrics: train_accuracy={:.4f}, train_roc_auc={:.4f}, train_precision={:.4f}, "
 		"train_recall={:.4f}, train_f1={:.4f}, train_macro_f1={:.4f}, train_cohen_kappa={:.4f}, "
 		"test_accuracy={:.4f}, test_roc_auc={:.4f}, test_precision={:.4f}, test_recall={:.4f}, "
@@ -532,6 +551,13 @@ def main(
 		metrics["test_f1"],
 		metrics["test_macro_f1"],
 		metrics["test_cohen_kappa"],
+=======
+		"Metrics: train_accuracy={:.4f}, test_accuracy={:.4f}, train_roc_auc={:.4f}, test_roc_auc={:.4f}",
+		metrics["train_accuracy"],
+		metrics["test_accuracy"],
+		metrics["train_roc_auc"],
+		metrics["test_roc_auc"],
+>>>>>>> origin
 	)
 
 

@@ -4,11 +4,15 @@ from pathlib import Path
 
 import pandas as pd
 
+<<<<<<< HEAD
 from online_retail_prediction.modeling.RNN_train import (
     cross_validate_rnn_model,
     prepare_rnn_training_data,
     train_rnn_model,
 )
+=======
+from online_retail_prediction.modeling.RNN_train import prepare_rnn_training_data
+>>>>>>> origin
 
 
 def test_prepare_rnn_data_trims_sequences_to_first_n_clicks(tmp_path: Path) -> None:
@@ -57,6 +61,7 @@ def test_prepare_rnn_data_trims_sequences_to_first_n_clicks(tmp_path: Path) -> N
     price_index = dataset.feature_names.index("price")
 
     assert session_to_sequence[1][:, price_index].tolist() == [10.0, 20.0]
+<<<<<<< HEAD
 
 
 def test_train_rnn_model_reports_expanded_metrics(tmp_path: Path) -> None:
@@ -214,3 +219,5 @@ def test_cross_validate_rnn_model_reports_cv_mean_and_std_metrics(tmp_path: Path
     }
 
     assert expected_cv_summary_keys.issubset(summary_metrics.keys())
+=======
+>>>>>>> origin
