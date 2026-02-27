@@ -1,0 +1,53 @@
+{
+  "selection_criteria": {
+    "method": "coefficient_of_variation",
+    "threshold_percentile": 0.75,
+    "threshold_value": 0.9999
+  },
+  "total_features_analyzed": 27,
+  "features_selected": 7,
+  "features": [
+    {
+      "feature": "mean_category_share_sale",
+      "coefficient_of_variation": 1.5442,
+      "std_dev": 0.304,
+      "mean": 0.1969
+    },
+    {
+      "feature": "mean_category_share_skirts",
+      "coefficient_of_variation": 1.3344,
+      "std_dev": 0.3148,
+      "mean": 0.2359
+    },
+    {
+      "feature": "mean_category_share_blouses",
+      "coefficient_of_variation": 1.2287,
+      "std_dev": 0.2885,
+      "mean": 0.2348
+    },
+    {
+      "feature": "mean_category_transition_count",
+      "coefficient_of_variation": 1.1846,
+      "std_dev": 1.0767,
+      "mean": 0.9089
+    },
+    {
+      "feature": "mean_category_share_trousers",
+      "coefficient_of_variation": 1.0972,
+      "std_dev": 0.3647,
+      "mean": 0.3324
+    },
+    {
+      "feature": "mean_high_price_count_first_n",
+      "coefficient_of_variation": 1.0888,
+      "std_dev": 3.2919,
+      "mean": 3.0235
+    },
+    {
+      "feature": "mean_n_clicks_observed",
+      "coefficient_of_variation": 1.0138,
+      "std_dev": 6.164,
+      "mean": 6.0803
+    }
+  ]
+}

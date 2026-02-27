@@ -1,0 +1,30 @@
+MODEL: bagging_knn
+OPTIMIZATION_METRIC: roc_auc
+BEST_CV_ROC_AUC: 0.926364
+
+BEST_PARAMS
+bootstrap: True
+estimator__classifier__n_neighbors: 7
+estimator__classifier__p: 2
+estimator__classifier__weights: uniform
+max_features: 0.6
+max_samples: 0.6
+n_estimators: 75
+
+TRAIN_METRICS
+ROC_AUC: 0.955448
+PRECISION: 0.877433
+RECALL: 0.768635
+F1: 0.819438
+MACRO_F1: 0.861880
+COHENS_KAPPA: 0.724398
+ACCURACY: 0.874922
+
+TEST_METRICS
+ROC_AUC: 0.927222
+PRECISION: 0.840352
+RECALL: 0.753664
+F1: 0.794651
+MACRO_F1: 0.842019
+COHENS_KAPPA: 0.684540
+ACCURACY: 0.856221

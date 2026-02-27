@@ -1,8 +1,9 @@
-"""Tests for first-N feature generation and replaceable intent-label strategies."""
+"""Tests for session feature generation modes and replaceable intent-label strategies."""
 
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from online_retail_prediction.modeling.feature_engineering import build_session_features
 from online_retail_prediction.modeling.labeling import (
@@ -37,6 +38,27 @@ def test_build_session_features_uses_first_n_and_keeps_short_sessions() -> None:
     assert set(features["session_id"]) == {1, 2, 3}
     assert features.loc[features["session_id"] == 1, "n_clicks_observed"].item() == 2
     assert features.loc[features["session_id"] == 3, "n_clicks_observed"].item() == 1
+
+
+def test_build_session_features_full_session_uses_all_clicks() -> None:
+    clickstream = _sample_clickstream()
+
+    features = build_session_features(
+        clickstream=clickstream,
+        aggregation_mode="full_session",
+    )
+
+    assert set(features["session_id"]) == {1, 2, 3}
+    assert features.loc[features["session_id"] == 1, "n_clicks_observed"].item() == 3
+    assert features.loc[features["session_id"] == 2, "n_clicks_observed"].item() == 2
+    assert features.loc[features["session_id"] == 3, "n_clicks_observed"].item() == 1
+
+
+def test_build_session_features_rejects_invalid_aggregation_mode() -> None:
+    clickstream = _sample_clickstream()
+
+    with pytest.raises(ValueError, match="Invalid aggregation_mode"):
+        build_session_features(clickstream=clickstream, aggregation_mode="invalid_mode")
 
 
 def test_proxy_hybrid_labels_follow_thresholds() -> None:

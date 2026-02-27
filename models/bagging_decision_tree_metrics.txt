@@ -1,0 +1,30 @@
+MODEL: bagging_decision_tree
+OPTIMIZATION_METRIC: roc_auc
+BEST_CV_ROC_AUC: 0.937289
+
+BEST_PARAMS
+bootstrap: False
+estimator__max_depth: 12
+estimator__min_samples_leaf: 2
+estimator__min_samples_split: 6
+max_features: 0.7
+max_samples: 0.6
+n_estimators: 200
+
+TRAIN_METRICS
+ROC_AUC: 0.984844
+PRECISION: 0.904364
+RECALL: 0.931379
+F1: 0.917673
+MACRO_F1: 0.934163
+COHENS_KAPPA: 0.868344
+ACCURACY: 0.938293
+
+TEST_METRICS
+ROC_AUC: 0.935727
+PRECISION: 0.796657
+RECALL: 0.806088
+F1: 0.801345
+MACRO_F1: 0.842010
+COHENS_KAPPA: 0.684026
+ACCURACY: 0.852476

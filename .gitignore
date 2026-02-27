@@ -1,7 +1,3 @@
-# Data artifacts (keep folder scaffold via .gitkeep files)
-data/**
-!data/**/.gitkeep
-
 # Mac OS-specific storage files
 .DS_Store
 
@@ -190,3 +186,9 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# .pkl files
+models/*.pkl
+
+# Demo API local state
+data/interim/*.db

@@ -17,14 +17,21 @@ classifiers = [
 ]
 requires-python = "~=3.11.0"
 dependencies = [
+    "fastapi>=0.133.1",
     "joblib",
+    "lightgbm",
     "loguru",
+    "matplotlib",
     "numpy",
     "pandas",
     "python-dotenv",
     "scikit-learn",
+    "seaborn",
+    "shap",
     "tqdm",
     "typer",
+    "uvicorn>=0.41.0",
+    "xgboost",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +43,7 @@ dev = [
     "notebook",
     "pytest",
     "ruff",
+    "streamlit",
 ]
 
 
