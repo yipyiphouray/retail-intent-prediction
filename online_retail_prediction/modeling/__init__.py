@@ -27,6 +27,7 @@ from online_retail_prediction.modeling.labeling import (
     ProxyHybridIntentLabelStrategy,
     generate_session_labels,
 )
+from online_retail_prediction.modeling.predict import InferencePipeline, predict_session
 
 __all__ = [
     "IntentLabelStrategy",
@@ -48,4 +49,6 @@ __all__ = [
     "generate_session_labels",
     "get_model_feature_importance",
     "get_permutation_feature_importance",
+    "InferencePipeline",
+    "predict_session",
 ]

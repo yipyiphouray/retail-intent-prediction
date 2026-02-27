@@ -87,7 +87,7 @@ def main(
 		)
 		all_results.append({"n_clicks": n_clicks, **metrics})
 		logger.info(
-			"n={} | cv_mean_test_roc_auc={:.4f} (±{:.4f}), cv_mean_test_precision={:.4f}, "
+			"n={} | cv_mean_test_roc_auc={:.4f} (+/-{:.4f}), cv_mean_test_precision={:.4f}, "
 			"cv_mean_test_recall={:.4f}, cv_mean_test_f1={:.4f}, cv_mean_test_macro_f1={:.4f}, "
 			"cv_mean_test_cohen_kappa={:.4f}, cv_mean_test_accuracy={:.4f}",
 			n_clicks,
@@ -111,7 +111,7 @@ def main(
 	_plot_results(results=results_df, output_path=plot_output_path)
 
 	logger.success(
-		"Best n_clicks by ROC-AUC: n_clicks={} with cv_mean_test_roc_auc={:.4f} (±{:.4f})",
+		"Best n_clicks by ROC-AUC: n_clicks={} with cv_mean_test_roc_auc={:.4f} (+/-{:.4f})",
 		int(best_result["n_clicks"]),
 		best_result["cv_mean_test_roc_auc"],
 		best_result["cv_std_test_roc_auc"],
