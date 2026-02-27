@@ -69,6 +69,8 @@ make test      # run pytest
 make lock      # refresh uv.lock
 make data      # run dataset pipeline entrypoint
 make clean     # remove Python cache artifacts
+make api       # run FastAPI demo inference API
+make demo_ui   # run React storefront demo
 ```
 
 ## Bagging Model Training
@@ -109,6 +111,34 @@ Outputs are written to `models/`:
 - `bagging_decision_tree.pkl` and `bagging_decision_tree_metrics.txt`
 - `bagging_knn.pkl` and `bagging_knn_metrics.txt`
 - `bagging_model_comparison.csv`
+
+## Demo Inference Deployment (API + UI)
+
+This repository includes a local deployment simulation with:
+
+- FastAPI backend for session click capture + inference
+- SQLite persistence for demo sessions
+- React + Vite storefront that emits click events
+
+Quick start (fresh clone):
+
+```bash
+make requirements
+make api
+make demo_ui
+```
+
+Model artifact handling:
+
+- Runtime model path: `models/stacking_ensemble_model.pkl`
+- Download manifest: `models/model_manifest.json`
+- On API startup, the app auto-downloads the model from the GitHub Release URL in the
+  manifest if the file is missing locally.
+
+Runbook:
+
+- See `docs/DEMO_INFERENCE_SIMULATION.md` for full setup, verification, API contract,
+  and troubleshooting guidance.
 
 ### Bagging Metrics (from `models/`)
 
