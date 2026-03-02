@@ -2,30 +2,17 @@
 
 End-to-end ML pipeline to predict purchase intent from online retail sessions.
 
-## Story So Far
+## Project Flow
 
-We started with a raw, click-level dataset and a simple question: can the first
-few clicks of a session tell us who is likely to buy? The team aligned on a
-leakage-safe approach, building **session-level features from the first N clicks**
-while reserving **full-session context for labels**. That split let us move fast
-without leaking future behavior into the model.
+This repository follows a clear progression from raw clickstream data to deployed inference:
 
-From there, we built a labeling system that supports proxy labels today and
-manual/cluster labels tomorrow, keeping the schema stable as the strategy
-evolves. We benchmarked baselines (Logistic Regression and Random Forest) to
-establish an initial performance floor, then expanded to bagging ensembles for
-stronger lift and comparability across model families.
-
-To make this useful beyond the notebook, we built a clustering workflow to
-summarize sessions, support manual labeling at scale, and generate exports for
-sequence-model handoff. In parallel, the team documented the business context
-(Poland-first, CEE-aware), defined stakeholder ownership, and framed KPI
-guardrails to keep the model tied to real operating decisions.
-
-Everything below captures the current state of that journey: how to run the
-pipeline, how the features and labels are defined, where the models live, and
-how the business case is structured.
-
+1. Data ingestion and preprocessing
+2. Feature engineering (first-N and full-session)
+3. Label generation (proxy, manual, or cluster-derived)
+4. Session clustering and labeling support
+5. Model training (baseline, bagging, stacking, RNN)
+6. Evaluation, reports, and figures
+7. Demo inference API + storefront UI
 
 ## Team Setup
 
@@ -61,19 +48,111 @@ make sync
 ## Common Commands
 
 ```bash
-make help      # list available targets
-make sync      # sync dependencies from pyproject + uv.lock
-make lint      # ruff format check + lint
-make format    # auto-fix lint and format
-make test      # run pytest
-make lock      # refresh uv.lock
-make data      # run dataset pipeline entrypoint
-make clean     # remove Python cache artifacts
-make api       # run FastAPI demo inference API
-make demo_ui   # run React storefront demo
+make help        # list available targets
+make sync        # sync dependencies from pyproject + uv.lock
+make lint        # ruff format check + lint
+make format      # auto-fix lint and format
+make test        # run pytest
+make lock        # refresh uv.lock
+make data        # run dataset pipeline entrypoint
+make clean       # remove Python cache artifacts
+make cluster_ui  # run Streamlit cluster labeling app
+make api         # run FastAPI demo inference API
+make demo_ui     # run React storefront demo
 ```
 
-## Bagging Model Training
+## Data Ingestion and Dataset Pipeline
+
+The dataset entrypoint is `online_retail_prediction/dataset.py` and is wired to:
+
+```bash
+make data
+```
+
+This is the initial step before feature engineering and labeling.
+
+## Feature Engineering
+
+Session-level feature construction (first-N and full-session) and label creation are handled via:
+
+```bash
+uv run python -m online_retail_prediction.features
+```
+
+Docs:
+
+- `docs/FEATURE_ENGINEERING.md`
+- `docs/LABELING.md`
+
+Outputs:
+
+- `data/processed/features_first_n.csv`
+- `data/processed/features_full_session.csv`
+- `data/processed/baseline_labels.csv`
+
+## Cluster Labeling Workflow
+
+Clustering is used to summarize sessions and scale intent labeling:
+
+- `docs/CLUSTER_LABELING.md`
+- `docs/STREAMLIT_CLUSTER_LABELING_UI.md`
+
+Run the labeling UI:
+
+```bash
+make cluster_ui
+```
+
+Key outputs:
+
+- `data/cluster_outputs/cluster_assignments.csv`
+- `data/cluster_outputs/cluster_label.csv`
+- `data/cluster_outputs/cluster_interpretations.csv`
+- `data/cluster_outputs/selected_features.json`
+
+### Clustering Metrics (from `models/clustering_metrics.json`)
+
+- k: 8
+- Sessions: 24,026
+- Features used: 17
+- Inertia: 214,544.2956
+- Silhouette: 0.1696
+- Calinski-Harabasz: 3,100.9500
+- Davies-Bouldin: 1.8167
+- Largest cluster share: 21.24%
+
+## Modeling
+
+Modeling lives under `online_retail_prediction/modeling/`. The project includes baseline,
+bagging, stacking, and RNN approaches.
+
+### Baseline Models
+
+Train baselines:
+
+```bash
+uv run python -m online_retail_prediction.modeling.baseline_train
+```
+
+Baseline metrics (from `models/`):
+
+- Logistic Regression (`models/baseline_model_metrics.txt`): Accuracy 0.7528, F1 0.5619, ROC-AUC 0.8913
+- Random Forest (`models/baseline_rf_model_metrics.txt`): Accuracy 0.7834, F1 0.5814, ROC-AUC 0.8920
+
+Baseline comparison across additional models is captured in `reports/model_comparison_baseline.csv`
+and visualized in `reports/figures/model_comparison_baseline.png`.
+
+![Baseline Model Comparison](reports/figures/model_comparison_baseline.png)
+
+| model               |   test_accuracy |   test_precision |   test_recall |   test_f1 |   test_roc_auc |
+|:--------------------|----------------:|-----------------:|--------------:|----------:|---------------:|
+| lightgbm            |        0.858302 |         0.827834 |      0.777903 |  0.802092 |       0.937904 |
+| xgboost             |        0.855805 |         0.823459 |      0.775648 |  0.798839 |       0.936927 |
+| random_forest       |        0.854141 |         0.792690 |      0.819053 |  0.805656 |       0.934550 |
+| knn                 |        0.848731 |         0.816697 |      0.760992 |  0.787861 |       0.920918 |
+| logistic_regression |        0.821889 |         0.728358 |      0.825254 |  0.773784 |       0.888654 |
+
+### Bagging Model Training
 
 Train and fine-tune bagging classifiers (base estimators: logistic regression, decision tree, and KNN)
 using processed features and cluster-derived intent labels:
@@ -86,31 +165,80 @@ Optional arguments:
 
 ```bash
 uv run python -m online_retail_prediction.modeling.bagging_train \
-    --features-path data/processed/features_first_n.csv \
+  --features-path data/processed/features_first_n.csv \
   --cluster-assignments-path data/cluster_outputs/cluster_assignments.csv \
   --cluster-labels-path data/cluster_outputs/cluster_label.csv \
-    --output-dir models \
-    --test-size 0.2 \
-    --cv 5 \
-    --random-state 42
+  --output-dir models \
+  --test-size 0.2 \
+  --cv 5 \
+  --random-state 42
 ```
-
-Fine-tuning is optimized on ROC-AUC only. Evaluation reports:
-
-- ROC-AUC
-- Precision
-- Recall
-- F1
-- Macro-F1
-- Cohen's Kappa
-- Accuracy
 
 Outputs are written to `models/`:
 
-- `bagging_logistic_regression.pkl` and `bagging_logistic_regression_metrics.txt`
-- `bagging_decision_tree.pkl` and `bagging_decision_tree_metrics.txt`
-- `bagging_knn.pkl` and `bagging_knn_metrics.txt`
+- `bagging_logistic_regression.pkl` + `bagging_logistic_regression_metrics.txt`
+- `bagging_decision_tree.pkl` + `bagging_decision_tree_metrics.txt`
+- `bagging_knn.pkl` + `bagging_knn_metrics.txt`
 - `bagging_model_comparison.csv`
+
+Bagging comparison (from `models/bagging_model_comparison.csv`):
+
+| model                       |   test_accuracy |   test_precision |   test_recall |   test_f1 |   test_roc_auc |
+|:----------------------------|----------------:|-----------------:|--------------:|----------:|---------------:|
+| bagging_decision_tree       |        0.852476 |         0.796657 |      0.806088 |  0.801345 |       0.935727 |
+| bagging_knn                 |        0.856221 |         0.840352 |      0.753664 |  0.794651 |       0.927222 |
+| bagging_logistic_regression |        0.823970 |         0.732932 |      0.822999 |  0.775358 |       0.888946 |
+
+### Stacking Ensemble
+
+Train the stacking ensemble (LR, RF, XGBoost, LightGBM base estimators):
+
+```bash
+uv run python -m online_retail_prediction.modeling.stacking_train
+```
+
+Outputs:
+
+- `models/stacking_ensemble_model.pkl`
+- `models/stacking_ensemble_base_comparison.csv` (when generated by the training run)
+
+### RNN for First-N Click Sequences
+
+Train a session-level RNN on the first N clicks:
+
+```bash
+uv run python -m online_retail_prediction.modeling.RNN_train
+```
+
+Tune N and produce the metrics table + figure:
+
+```bash
+uv run python -m online_retail_prediction.modeling.RNN_tuning
+```
+
+RNN outputs:
+
+- `models/rnn_first_n_clicks_model.npz`
+- `reports/rnn_n_clicks_metrics.csv`
+- `reports/figures/rnn_n_clicks_performance.png`
+
+![RNN N-Clicks Performance](reports/figures/rnn_n_clicks_performance.png)
+
+RNN CV test metrics by N (from `reports/rnn_n_clicks_metrics.csv`):
+
+| n_clicks | cv_mean_test_accuracy | cv_mean_test_precision | cv_mean_test_recall | cv_mean_test_f1 | cv_mean_test_roc_auc |
+|---------:|----------------------:|-----------------------:|--------------------:|----------------:|---------------------:|
+|        2 |              0.767960 |               0.713909 |            0.630927 |        0.665835 |             0.824909 |
+|        3 |              0.790935 |               0.751889 |            0.648177 |        0.695735 |             0.851982 |
+|        4 |              0.803589 |               0.771512 |            0.668134 |        0.715071 |             0.871941 |
+|        5 |              0.818073 |               0.792243 |            0.692928 |        0.737581 |             0.887461 |
+|        6 |              0.823983 |               0.808475 |            0.687518 |        0.742268 |             0.899869 |
+|        7 |              0.833223 |               0.813956 |            0.713669 |        0.759522 |             0.909200 |
+|        8 |              0.839966 |               0.817210 |            0.735986 |        0.772423 |             0.919860 |
+|        9 |              0.843046 |               0.805477 |            0.767436 |        0.782454 |             0.925149 |
+|       10 |              0.853867 |               0.826436 |            0.768566 |        0.794881 |             0.931700 |
+
+Best observed RNN performance is at N=10 by accuracy, F1, and ROC-AUC.
 
 ## Demo Inference Deployment (API + UI)
 
@@ -137,129 +265,12 @@ Model artifact handling:
 
 Runbook:
 
-- See `docs/DEMO_INFERENCE_SIMULATION.md` for full setup, verification, API contract,
-  and troubleshooting guidance.
-
-### Bagging Metrics (from `models/`)
-
-Bagging + Logistic Regression (`models/bagging_logistic_regression_metrics.txt`, test set):
-
-- Accuracy: 0.7524
-- Precision: 0.3978
-- Recall: 0.9488
-- F1: 0.5606
-- ROC-AUC: 0.8909
-- Best CV ROC-AUC: 0.8971
-
-Bagging + Decision Tree (`models/bagging_decision_tree_metrics.txt`, test set):
-
-- Accuracy: 0.7665
-- Precision: 0.4113
-- Recall: 0.9338
-- F1: 0.5711
-- ROC-AUC: 0.8919
-- Best CV ROC-AUC: 0.8966
-
-## Cluster Labeling Workflow
-
-Session clustering and manual cluster-label propagation are documented in:
-
-- `docs/CLUSTER_LABELING.md`
-- `docs/STREAMLIT_CLUSTER_LABELING_UI.md`
-
-Cluster interpretation notebook:
-
-- `notebooks/cluster_interpretation.ipynb`: explains what each k-means cluster means in
-  business terms using `cluster_summary.csv`, CV-based feature selection, and cluster profile
-  visualizations.
-
-Key outputs:
-
-- Session-level clustering exports: `data/cluster_outputs/`
-- Clustering metrics and artifacts: `models/`
-- Interpretation and UI support artifacts:
-  - `data/cluster_outputs/cluster_interpretations.csv`
-  - `data/cluster_outputs/selected_features.json`
-  - `data/cluster_outputs/cluster_label.csv`
-
-### Clustering Metrics (from `models/`)
-
-From `models/clustering_metrics.json`:
-
-- k: 8
-- Sessions: 24,026
-- Features used: 17
-- Inertia: 214,544.2956
-- Silhouette: 0.1696
-- Calinski-Harabasz: 3,100.9500
-- Davies-Bouldin: 1.8167
-- Largest cluster share: 21.24%
-
-## Feature Engineering
-
-Session-level feature construction (first-N and full-session modes) is documented in:
-
-- `docs/FEATURE_ENGINEERING.md`
-
-Key points:
-
-- Supports two configurations: first `N` clicks and full-session aggregation.
-- Supports column normalization from raw UCI schema.
-- Writes features to `data/processed/features_first_n.csv` and `data/processed/features_full_session.csv` via `online_retail_prediction/features.py`.
-
-## Labeling Strategies
-
-Session-level intent labeling (full-session context) is documented in:
-
-- `docs/LABELING.md`
-
-Key points:
-
-- Strategy-based labeling (`ProxyHybrid`, `ExternalPartial`, `Override`).
-- Standard output schema: `session_id`, `label`, `label_source`, `label_confidence`.
-- Writes labels to `data/processed/baseline_labels.csv` via `online_retail_prediction/features.py`.
-
-## Baseline Model Comparison
-
-Baseline model evaluation and metrics are documented in:
-
-- `docs/model_comparison.md`
-
-Summary:
-
-- Logistic Regression and Random Forest baselines on 27 engineered features.
-- Random Forest is the best baseline by accuracy/F1 while LR has higher recall.
-
-### Baseline Metrics (from `models/`)
-
-Logistic Regression (`models/baseline_model_metrics.txt`):
-
-- Accuracy: 0.7528
-- Precision: 0.3985
-- Recall: 0.9525
-- F1: 0.5619
-- ROC-AUC: 0.8913
-
-Random Forest (`models/baseline_rf_model_metrics.txt`):
-
-- Accuracy: 0.7834
-- Precision: 0.4286
-- Recall: 0.9038
-- F1: 0.5814
-- ROC-AUC: 0.8920
+- `docs/DEMO_INFERENCE_SIMULATION.md`
 
 ## Business Context and Value Proposition (Issue #10)
 
-Business context, market sizing, stakeholder map, and KPI framework:
-
 - `reports/issue-10-business-context.md`
 - `reports/issue-10-business-context-presentation.md`
-
-Highlights:
-
-- Poland-first operating context with CEE comparator markets.
-- Clear constraints from the source dataset and governance guardrails.
-- 90-day execution plan with KPI placeholders.
 
 ## Docs Site (MkDocs)
 
@@ -340,6 +351,9 @@ retail-intent-prediction/
 |-- environment.yml
 |-- pyproject.toml
 |-- uv.lock
+|-- apps/
+|   |-- cluster_labeling_app.py
+|   `-- demo_storefront/
 |-- data/
 |   |-- external/
 |   |-- interim/
@@ -352,18 +366,16 @@ retail-intent-prediction/
 |-- notebooks/
 |-- references/
 |-- reports/
-|   `-- figures/
+|   |-- figures/
+|   |-- model_comparison_baseline.csv
+|   `-- rnn_n_clicks_metrics.csv
 |-- tests/
-|   `-- test_data.py
-`-- online_retail_prediction/
-    |-- __init__.py
+|-- online_retail_prediction/
+    |-- api/
+    |-- modeling/
     |-- config.py
     |-- dataset.py
     |-- features.py
     |-- plots.py
-    `-- modeling/
-        |-- __init__.py
-        |-- feature_importance.py
-        |-- predict.py
-        `-- train.py
+    `-- __init__.py
 ```
